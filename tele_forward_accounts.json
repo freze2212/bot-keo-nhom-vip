@@ -1,0 +1,935 @@
+{
+  "accounts": [
+    {
+      "id": "bot_forward_1",
+      "name": "Trâm Anh - ẢO 10%",
+      "phone": "+84776956765",
+      "api_id": 32866514,
+      "api_hash": "64436fe83185c956bece789a6f3253b8",
+      "twofa": "RUBY2E",
+      "group_id": "-1002680363714",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 10,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "10%",
+      "is_virtual": true,
+      "win_rate": 0.75,
+      "loss_rate": 0.2,
+      "tie_rate": 0.05,
+      "opening_order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20,
+        20
+      ],
+      "outcome_message_map": {
+        "WIN": 4,
+        "LOSS": 5,
+        "TIE": 4
+      },
+      "ending_order": [],
+      "ending_delays": [],
+      "min_source_messages": 6,
+      "enabled": false,
+      "send_table_preview": false
+    },
+    {
+      "id": "bot_forward_2",
+      "name": "Trâm Anh (@tramanhvip86) - ẢO 5000",
+      "phone": "+84878377698",
+      "api_id": 30590012,
+      "api_hash": "66d4b8c135ab325038bda084a5453fe7",
+      "twofa": "gg88vip86",
+      "group_id": "-1002574891758",
+      "name_service": "NS2",
+      "session_table": "C02",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "5000",
+      "is_virtual": true,
+      "win_rate": 0.75,
+      "loss_rate": 0.2,
+      "tie_rate": 0.05,
+      "opening_order": [
+        0,
+        1,
+        2
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20
+      ],
+      "ending_order": [
+        3,
+        4
+      ],
+      "ending_delays": [
+        20,
+        20
+      ],
+      "enabled": false,
+      "send_table_preview": false
+    },
+    {
+      "id": "bot_forward_3",
+      "name": "MINH (@MINHQUAN68799) - THẬT 1000",
+      "phone": "+84566123980",
+      "api_id": 18214111,
+      "api_hash": "2aa34f73907e52b2a05147878356e5e9",
+      "twofa": "797979",
+      "group_id": "-1003985026080",
+      "name_service": "NS3",
+      "session_table": "C05",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "is_virtual": false,
+      "opening_order": [
+        4,
+        0,
+        1
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "send_table_preview_caption": "🎲 BÀN CƯỢC: BACCARAT {table} | CHUẨN BỊ VÀO LỆNH NÀO AE 💸",
+      "ending_order": [
+        2
+      ],
+      "ending_delays": [
+        20
+      ],
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_4",
+      "name": "MINH (@MINHQUAN68799) - ẢO 1000",
+      "phone": "+84566123980",
+      "api_id": 18214111,
+      "api_hash": "2aa34f73907e52b2a05147878356e5e9",
+      "twofa": "797979",
+      "group_id": "-1003917889129",
+      "name_service": "NS3",
+      "session_table": "C05",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "is_virtual": true,
+      "win_rate": 0.75,
+      "loss_rate": 0.2,
+      "tie_rate": 0.05,
+      "opening_order": [
+        4,
+        0,
+        1
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20
+      ],
+      "send_intro_text": "CHUẨN BỊ VÀO LỆNH NÀO AE 💸",
+      "ending_order": [
+        2
+      ],
+      "ending_delays": [
+        20
+      ],
+      "enabled": false,
+      "send_table_preview": false
+    },
+    {
+      "id": "bot_forward_5",
+      "name": "Hải Yến - 5000",
+      "phone": "+84365618453",
+      "api_id": 30590012,
+      "api_hash": "66d4b8c135ab325038bda084a5453fe7",
+      "twofa": "HAIYEN123@",
+      "group_id": "-1003542845967",
+      "name_service": "NS4",
+      "session_table": "C08",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "5000",
+      "opening_order": [
+        0,
+        1,
+        2
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "send_table_preview_caption": "🎲 BÀN CƯỢC: BACCARAT {table} | CHUẨN BỊ VÀO LỆNH NÀO AE 💸",
+      "ending_order": [
+        3,
+        4,
+        5
+      ],
+      "ending_delays": [
+        20,
+        20,
+        20
+      ],
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_6",
+      "name": "Hải Yến - ẢO 5000",
+      "phone": "+84365618453",
+      "api_id": 30590012,
+      "api_hash": "66d4b8c135ab325038bda084a5453fe7",
+      "twofa": "HAIYEN123@",
+      "group_id": "-1003449078678",
+      "name_service": "NS4",
+      "session_table": "C08",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "5000",
+      "is_virtual": true,
+      "win_rate": 0.75,
+      "loss_rate": 0.2,
+      "tie_rate": 0.05,
+      "opening_order": [
+        0,
+        1,
+        2
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20
+      ],
+      "ending_order": [
+        3,
+        4,
+        5
+      ],
+      "ending_delays": [
+        20,
+        20,
+        20
+      ],
+      "enabled": false,
+      "send_table_preview": false
+    },
+    {
+      "id": "bot_forward_7",
+      "name": "Bot 7 (+84995242731) - THẬT",
+      "phone": "+84995242731",
+      "api_id": 33296584,
+      "api_hash": "02a20fdfd8678cbc8cef9b0dfccaea90",
+      "twofa": "2012",
+      "group_id": "-1003593138431",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "winloss_result": true,
+      "is_virtual": false,
+      "opening_order": [
+        0,
+        1,
+        2
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "send_table_preview_caption": "🎲 BÀN CƯỢC: BACCARAT {table} | CHUẨN BỊ VÀO LỆNH NÀO AE 💸",
+      "outcome_message_map": {
+        "WIN": 5,
+        "LOSS": 3,
+        "TIE": 4
+      },
+      "ending_order": [
+        6
+      ],
+      "ending_delays": [
+        20
+      ],
+      "min_source_messages": 7,
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_8",
+      "name": "Bot 8 (+84995242731) - ẢO",
+      "phone": "+84995242731",
+      "api_id": 33296584,
+      "api_hash": "02a20fdfd8678cbc8cef9b0dfccaea90",
+      "twofa": "2012",
+      "group_id": "-1003866892980",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "winloss_result": true,
+      "is_virtual": true,
+      "win_rate": 0.75,
+      "loss_rate": 0.2,
+      "tie_rate": 0.05,
+      "opening_order": [
+        0,
+        1,
+        2
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "outcome_message_map": {
+        "WIN": 5,
+        "LOSS": 3,
+        "TIE": 4
+      },
+      "ending_order": [
+        6
+      ],
+      "ending_delays": [
+        20
+      ],
+      "min_source_messages": 7,
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_9",
+      "name": "Nhóm THẬT MỚI -1004406728814",
+      "phone": "+84782717585",
+      "api_id": 38676417,
+      "api_hash": "531c255a36ba50727f85bed6c4cbbb48",
+      "session_name": "user_session_84782717585",
+      "twofa": "123",
+      "group_id": "-1004406728814",
+      "name_service": "NS2",
+      "session_table": "C02",
+      "source_username": "frezeit",
+      "interval_minutes": 10,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "500",
+      "profit_style": "pnl",
+      "is_virtual": false,
+      "opening_order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "send_table_preview_caption": "🎰 SẢNH SEXY BÀN : {table} 💎",
+      "ending_order": [
+        4,
+        5
+      ],
+      "ending_delays": [
+        20,
+        20
+      ],
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_10",
+      "name": "Nhóm ẢO MỚI -1004399779390",
+      "phone": "+84782717585",
+      "api_id": 38676417,
+      "api_hash": "531c255a36ba50727f85bed6c4cbbb48",
+      "session_name": "user_session_84782717585",
+      "twofa": "123",
+      "group_id": "-1004399779390",
+      "name_service": "NS2",
+      "session_table": "C02",
+      "source_username": "frezeit",
+      "interval_minutes": 10,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "500",
+      "profit_style": "pnl",
+      "is_virtual": true,
+      "win_rate": 0.75,
+      "loss_rate": 0.2,
+      "tie_rate": 0.05,
+      "opening_order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "ending_order": [
+        4,
+        5
+      ],
+      "ending_delays": [
+        20,
+        20
+      ],
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_11",
+      "name": "Bot 11 (+84877541542) - THẬT",
+      "phone": "+84877541542",
+      "api_id": 18744223,
+      "api_hash": "5864e5b1c2efcea9397d1c882eb45001",
+      "twofa": "2012",
+      "group_id": "-1003252494918",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "winloss_result": true,
+      "is_virtual": false,
+      "opening_order": [
+        0,
+        1,
+        2
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "send_table_preview_caption": "🎲 BÀN CƯỢC: BACCARAT {table} | CHUẨN BỊ VÀO LỆNH NÀO AE 💸",
+      "outcome_message_map": {
+        "WIN": 5,
+        "LOSS": 3,
+        "TIE": 4
+      },
+      "ending_order": [
+        6
+      ],
+      "ending_delays": [
+        20
+      ],
+      "min_source_messages": 7,
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_12",
+      "name": "Bot 12 (+84877541542) - ẢO",
+      "phone": "+84877541542",
+      "api_id": 18744223,
+      "api_hash": "5864e5b1c2efcea9397d1c882eb45001",
+      "twofa": "2012",
+      "group_id": "-1003774724495",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "winloss_result": true,
+      "is_virtual": true,
+      "win_rate": 0.75,
+      "loss_rate": 0.2,
+      "tie_rate": 0.05,
+      "opening_order": [
+        0,
+        1,
+        2
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "outcome_message_map": {
+        "WIN": 5,
+        "LOSS": 3,
+        "TIE": 4
+      },
+      "ending_order": [
+        6
+      ],
+      "ending_delays": [
+        20
+      ],
+      "min_source_messages": 7,
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_13",
+      "name": "+84583876186 - THẬT",
+      "phone": "+84583876186",
+      "api_id": 38252322,
+      "api_hash": "3487ba3eb9b9a2368bee71c89dcdbdf2",
+      "twofa": "686868",
+      "group_id": "-1002352478218",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "is_virtual": false,
+      "opening_order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "send_table_preview_caption": "🎲 BÀN CƯỢC: BACCARAT {table} | CHUẨN BỊ VÀO LỆNH NÀO AE 💸",
+      "ending_order": [
+        4,
+        5
+      ],
+      "ending_delays": [
+        20,
+        20
+      ],
+      "min_source_messages": 6,
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_14",
+      "name": "+84583876186 - ẢO",
+      "phone": "+84583876186",
+      "api_id": 38252322,
+      "api_hash": "3487ba3eb9b9a2368bee71c89dcdbdf2",
+      "twofa": "686868",
+      "group_id": "-1002684404560",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "is_virtual": true,
+      "win_rate": 0.75,
+      "loss_rate": 0.2,
+      "tie_rate": 0.05,
+      "opening_order": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "ending_order": [
+        4,
+        5
+      ],
+      "ending_delays": [
+        20,
+        20
+      ],
+      "min_source_messages": 6,
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_15",
+      "name": "+84563517562 - ẢO",
+      "phone": "+84563517562",
+      "api_id": 37324462,
+      "api_hash": "6f294646d8cd94ea4aef1aad0346b07b",
+      "twofa": "696969",
+      "group_id": "-1002609240595",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 60,
+      "schedule_windows": [
+        {
+          "start_time": "13:10",
+          "end_time": "16:10"
+        },
+        {
+          "start_time": "19:10",
+          "end_time": "22:10"
+        }
+      ],
+      "bet_amount_label": "1000",
+      "is_virtual": true,
+      "win_rate": 0.8,
+      "loss_rate": 0.2,
+      "tie_rate": 0,
+      "opening_order": [
+        0,
+        1
+      ],
+      "opening_delays": [
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "ending_order": [
+        2
+      ],
+      "ending_delays": [
+        20
+      ],
+      "enabled": false,
+      "start_time": "00:00",
+      "end_time": "23:55"
+    },
+    {
+      "id": "bot_forward_16",
+      "name": "+84878329350 - THẬT",
+      "phone": "+84878329350",
+      "api_id": 30737577,
+      "api_hash": "6ee0d59b317d7b1330c80a53c587c24c",
+      "session_name": "user_session_84878329350",
+      "twofa": "190300",
+      "group_id": "-1002626273861",
+      "name_service": "NS2",
+      "session_table": "C02",
+      "source_username": "frezeit",
+      "interval_minutes": 10,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "is_virtual": false,
+      "opening_order": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20,
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "send_table_preview_caption": "🎰 SẢNH SEXY BÀN : {table} 💎",
+      "ho_source_forward": {
+        "B": 6,
+        "P": 7
+      },
+      "result_via_source_messages": true,
+      "outcome_message_map": {
+        "WIN": 8,
+        "LOSS": 9,
+        "TIE": 10
+      },
+      "ending_order": [
+        11,
+        12,
+        13,
+        14
+      ],
+      "ending_delays": [
+        20,
+        20,
+        20,
+        20
+      ],
+      "min_source_messages": 15,
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_17",
+      "name": "+84878329350 - AO -1002614967414",
+      "phone": "+84878329350",
+      "api_id": 30737577,
+      "api_hash": "6ee0d59b317d7b1330c80a53c587c24c",
+      "session_name": "user_session_84878329350",
+      "twofa": "190300",
+      "group_id": "-1002614967414",
+      "name_service": "NS2",
+      "session_table": "C02",
+      "source_username": "frezeit",
+      "interval_minutes": 10,
+      "schedule_windows": [
+        {
+          "start_time": "13:10",
+          "end_time": "16:10"
+        },
+        {
+          "start_time": "19:10",
+          "end_time": "22:10"
+        }
+      ],
+      "start_time": "13:10",
+      "end_time": "22:10",
+      "bet_amount_label": "1000",
+      "is_virtual": true,
+      "win_rate": 0.8,
+      "loss_rate": 0.2,
+      "tie_rate": 0,
+      "opening_order": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20,
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "ho_source_forward": {
+        "B": 6,
+        "P": 7
+      },
+      "result_via_source_messages": true,
+      "outcome_message_map": {
+        "WIN": 8,
+        "LOSS": 9,
+        "TIE": 10
+      },
+      "ending_order": [
+        11,
+        12,
+        13,
+        14
+      ],
+      "ending_delays": [
+        20,
+        20,
+        20,
+        20
+      ],
+      "min_source_messages": 15,
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_18",
+      "name": "Bot 18 (+84924805125) - THẬT",
+      "phone": "+84924805125",
+      "api_id": 25227107,
+      "api_hash": "8e267ba4f97e0ef7690ab0c8ba3d03d0",
+      "session_name": "user_session_84924805125",
+      "twofa": "05071993",
+      "group_id": "-1003785213107",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "is_virtual": false,
+      "opening_order": [
+        0,
+        1,
+        3
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "send_table_preview_caption": "🎲 BÀN CƯỢC: BACCARAT {table} | CHUẨN BỊ VÀO LỆNH NÀO AE 💸",
+      "result_via_source_messages": true,
+      "outcome_message_map": {
+        "WIN": 4,
+        "LOSS": 2,
+        "TIE": 2
+      },
+      "ending_order": [
+        5
+      ],
+      "ending_delays": [
+        20
+      ],
+      "min_source_messages": 6,
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_19",
+      "name": "Bot 19 (+84924805125) - ẢO",
+      "phone": "+84924805125",
+      "api_id": 25227107,
+      "api_hash": "8e267ba4f97e0ef7690ab0c8ba3d03d0",
+      "session_name": "user_session_84924805125",
+      "twofa": "05071993",
+      "group_id": "-1003840640372",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 15,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "is_virtual": true,
+      "win_rate": 0.8,
+      "loss_rate": 0.2,
+      "tie_rate": 0,
+      "opening_order": [
+        0,
+        1,
+        3
+      ],
+      "opening_delays": [
+        20,
+        20,
+        20
+      ],
+      "send_table_preview": false,
+      "result_via_source_messages": true,
+      "outcome_message_map": {
+        "WIN": 4,
+        "LOSS": 2,
+        "TIE": 2
+      },
+      "ending_order": [
+        5
+      ],
+      "ending_delays": [
+        20
+      ],
+      "min_source_messages": 6,
+      "enabled": false
+    },
+    {
+      "id": "bot_forward_20",
+      "name": "Local TEST - THẬT (+84562648719)",
+      "phone": "+84562648719",
+      "api_id": 32849260,
+      "api_hash": "e3386b2ec20a5c913b2bd5f2432fd386",
+      "session_name": "user_session_84562648719",
+      "group_id": "-1002566053276",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 5,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "is_virtual": false,
+      "flow_prior_round": true,
+      "ho_mode": "random",
+      "step_delay": 5,
+      "opening_order": [0, 1],
+      "opening_delays": [5, 5],
+      "opening_after_preview": [2],
+      "opening_after_preview_delays": [5],
+      "send_table_preview": true,
+      "table_preview_before_ho": true,
+      "send_table_preview_caption": "🎰 SẢNH SEXY BÀN : {table} 💎",
+      "stamp_result_on_image": true,
+      "result_via_source_messages": true,
+      "outcome_message_map": {
+        "WIN": 5,
+        "LOSS": 3,
+        "TIE": 6
+      },
+      "ending_order": [4],
+      "ending_delays": [5],
+      "min_source_messages": 7,
+      "enabled": true
+    },
+    {
+      "id": "bot_forward_21",
+      "name": "Local TEST - ẢO (+84562648719)",
+      "phone": "+84562648719",
+      "api_id": 32849260,
+      "api_hash": "e3386b2ec20a5c913b2bd5f2432fd386",
+      "session_name": "user_session_84562648719",
+      "group_id": "-1004394354578",
+      "name_service": "NS1",
+      "session_table": "C01",
+      "source_username": "frezeit",
+      "interval_minutes": 5,
+      "start_time": "00:00",
+      "end_time": "23:55",
+      "bet_amount_label": "1000",
+      "is_virtual": true,
+      "flow_prior_round": true,
+      "ho_mode": "match_shot",
+      "win_rate": 0.75,
+      "loss_rate": 0.2,
+      "tie_rate": 0.05,
+      "step_delay": 5,
+      "opening_order": [0, 1],
+      "opening_delays": [5, 5],
+      "opening_after_preview": [2],
+      "opening_after_preview_delays": [5],
+      "send_table_preview": true,
+      "table_preview_before_ho": true,
+      "send_table_preview_caption": "🎰 SẢNH SEXY BÀN : {table} 💎",
+      "stamp_result_on_image": true,
+      "result_via_source_messages": true,
+      "outcome_message_map": {
+        "WIN": 5,
+        "LOSS": 3,
+        "TIE": 6
+      },
+      "ending_order": [4],
+      "ending_delays": [5],
+      "min_source_messages": 7,
+      "enabled": true
+    }
+  ]
+}

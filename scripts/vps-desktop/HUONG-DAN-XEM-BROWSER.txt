@@ -1,0 +1,19 @@
+TAI SAO RDP KHONG THAY FIREFOX?
+================================
+BCR-session1..4 chay qua NSSM (Windows Service) duoi LocalSystem.
+Service luon chay o Session 0 (desktop an) — du HEADLESS=0 thi Firefox
+van mo nhung KHONG hien tren man hinh RDP cua ban.
+
+Bot van chay binh thuong (chup anh, vao ban, dat cuoc).
+
+CACH XEM BROWSER TREN RDP
+=========================
+Double-click file tren Desktop:
+  - XEM-BROWSER-NS1.bat  (hoac NS2/NS3/NS4)
+
+File se:
+  1. Tam STOP service tuong ung
+  2. Mo Firefox NGAY tren man hinh RDP (cua so CMD + browser)
+  3. Khi dong CMD -> tu START lai service
+
+Luu y: Chi chay 1 file debug luc mot thoi diem (tranh trung account).

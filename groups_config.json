@@ -1,0 +1,16 @@
+{
+  "NS1": {
+    "api_base_url": "http://localhost:3201",
+    "screenshot_dir": "public/screenshots",
+    "groups": [
+      {
+        "name": "1 LỆNH CHUẨN - TRÂM ANH",
+        "id": "-1002680363714",
+        "opening_order": [0, 1, 2, 3],
+        "opening_delays": [5, 5, 5, 5],
+        "ending_order": [4],
+        "ending_delays": [5]
+      }
+    ]
+  }
+}

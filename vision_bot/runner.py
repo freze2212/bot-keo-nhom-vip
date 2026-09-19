@@ -1,0 +1,564 @@
+"""
+Vision 24/7 — hoàn thiện theo PLAN.md
+Done khi: đặt đúng ô (BET_OK) + chụp đúng lúc ± tiền (SETTLEMENT capture).
+"""
+from __future__ import annotations
+
+import os
+import sys
+import time
+from dataclasses import dataclass, field
+from datetime import datetime
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+else:
+    print("[!] Cần Windows GUI.")
+    sys.exit(1)
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+import cv2
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(os.path.join(_ROOT, ".env"))
+except Exception:
+    pass
+
+from config_manager import load_config, save_config, VisionLogger
+from window_controller import WindowController
+from navigator import Navigator
+from screen_grabber import ScreenGrabber
+from visual_detector import VisualDetector, GameStateMachine
+from bridge import VisionBridge
+from chrome_launcher import ensure_chrome_up
+from settlement import SettlementDetector, save_settlement_capture, get_taskbar_height
+from bet_window import BetVerifier
+from login_flow import run_enter_sexy_flow, login_home_url
+from shot_store import publish_sexy_shot
+import random
+
+@dataclass
+class HealthWatchdog:
+    max_no_window_sec: float = 25.0
+    max_stale_sec: float = 180.0
+    recover_cooldown_sec: float = 45.0
+    max_recovers_per_hour: int = 20
+    _no_window_since: float | None = None
+    _last_activity: float = field(default_factory=time.time)
+    _last_recover: float = 0.0
+    _recover_times: list = field(default_factory=list)
+
+    def mark_activity(self) -> None:
+        self._last_activity = time.time()
+        self._no_window_since = None
+
+    def mark_window_missing(self) -> None:
+        if self._no_window_since is None:
+            self._no_window_since = time.time()
+
+    def mark_window_ok(self) -> None:
+        self._no_window_since = None
+
+    def need_recover(self, has_window: bool, saw_game_signal: bool) -> tuple[bool, str]:
+        now = time.time()
+        if has_window:
+            self.mark_window_ok()
+            if saw_game_signal:
+                self.mark_activity()
+        else:
+            self.mark_window_missing()
+        if self._last_recover and (now - self._last_recover) < self.recover_cooldown_sec:
+            return False, ""
+        self._recover_times = [t for t in self._recover_times if now - t < 3600]
+        if len(self._recover_times) >= self.max_recovers_per_hour:
+            return False, "recover_rate_limited"
+        if not has_window and self._no_window_since:
+            if now - self._no_window_since >= self.max_no_window_sec:
+                return True, "chrome_window_missing"
+        if has_window and (now - self._last_activity) >= self.max_stale_sec:
+            return True, "game_stale_no_signal"
+        return False, ""
+
+    def note_recover(self) -> None:
+        now = time.time()
+        self._last_recover = now
+        self._recover_times.append(now)
+        self._no_window_since = None
+        self._last_activity = now
+
+
+def _ensure_capture_dir(config) -> str:
+    rel = config.get("capture_dir") or "captures"
+    path = rel if os.path.isabs(rel) else os.path.join(_HERE, rel)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _profile_dir(config) -> str:
+    rel = config.get("chrome_profile_dir") or "chrome_user_data_vision"
+    return rel if os.path.isabs(rel) else os.path.join(_ROOT, rel)
+
+
+def _game_url(config) -> str:
+    url = (config.get("game_url") or "").strip().strip('"').strip("'")
+    if url:
+        return url
+    domain = (os.getenv("DOMAIN") or "").strip().strip('"').strip("'").rstrip("/")
+    router = (os.getenv("ROUTER_URL_BACARAT_SEXY") or "/seamless?gameType=LIVE").strip().strip('"')
+    if domain:
+        return f"{domain}{router}"
+    return "https://www.google.com"
+
+
+def _server_url(config) -> str:
+    env_socket = (os.getenv("SOCKET_SERVER_URL") or "").strip().strip('"')
+    if env_socket:
+        return env_socket.rstrip("/")
+    host = (os.getenv("SERVER_HOSTNAME") or "http://127.0.0.1").strip().strip('"').rstrip("/")
+    port = (os.getenv("SERVER_PORT") or "3201").strip().strip('"')
+    explicit = (config.get("server_url") or "").strip().rstrip("/")
+    if explicit and not explicit.endswith(":3000"):
+        return explicit
+    return f"{host}:{port}"
+
+
+def _crop_roi(frame, roi):
+    if frame is None or not roi:
+        return None
+    x, y = int(roi["x"]), int(roi["y"])
+    w, h = int(roi["width"]), int(roi["height"])
+    if y + h > frame.shape[0] or x + w > frame.shape[1] or x < 0 or y < 0:
+        return None
+    return frame[y : y + h, x : x + w]
+
+
+def _winner_code(label: str) -> str:
+    u = str(label or "").upper()
+    if u.startswith("B") or u == "BANKER":
+        return "B"
+    if u.startswith("P") or u == "PLAYER":
+        return "P"
+    if "TIE" in u or u == "T":
+        return "T"
+    return "X"
+
+
+def _alert(log: VisionLogger, msg: str) -> None:
+    log.warn(msg)
+    token = (os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or "").strip()
+    chat = (
+        os.getenv("GROUP")
+        or os.getenv("GROUP_NS2")
+        or os.getenv("ALERT_CHAT_ID")
+        or os.getenv("ID_TELEGRAM_RECIPIENT")
+        or ""
+    ).strip()
+    if not token or not chat:
+        return
+    try:
+        import requests
+
+        requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat, "text": f"[VISION] {msg}"},
+            timeout=8,
+        )
+    except Exception:
+        pass
+
+
+def lock_window(
+    wc: WindowController,
+    target_rect: dict,
+    retries: int = 20,
+    maximize: bool = False,
+    profile_dir: str | None = None,
+):
+    for _ in range(retries):
+        rect = wc.find_and_setup_window(
+            target_x=int(target_rect["x"]),
+            target_y=int(target_rect["y"]),
+            target_w=int(target_rect["width"]),
+            target_h=int(target_rect["height"]),
+            maximize=maximize,
+            profile_dir=profile_dir,
+        )
+        if rect:
+            return rect
+        time.sleep(1.0)
+    return None
+
+
+def full_recover(config, wc, nav, log: VisionLogger, reason: str, grabber=None):
+    _alert(log, f"AUTO-RECOVER: {reason}")
+    log.event("RECOVER_START", reason)
+    target_rect = config.get("window_rect", {"x": 0, "y": 0, "width": 1920, "height": 1080})
+    profile = _profile_dir(config)
+    if config.get("auto_launch_chrome", True):
+        ensure_chrome_up(
+            url=login_home_url(config),
+            profile_dir=profile,
+            chrome_exe=(config.get("chrome_exe") or None) or None,
+            force_restart=True,
+            wait_sec=float(config.get("chrome_boot_wait_sec") or 12),
+            window_w=int(target_rect.get("width") or 1920),
+            window_h=int(target_rect.get("height") or 1080),
+        )
+    win_rect = lock_window(
+        wc,
+        target_rect,
+        retries=25,
+        maximize=bool(config.get("maximize_window", False)),
+        profile_dir=profile,
+    )
+    if not win_rect:
+        _alert(log, "RECOVER FAIL: no browser window")
+        return None
+    nav.set_window_rect(win_rect)
+    dismiss = config.get("dismiss_steps") or []
+    if dismiss:
+        nav.execute_sequence(dismiss)
+    # Luồng tọa độ: login → Sexy → Chơi ngay → bàn (có STEP verify)
+    res = run_enter_sexy_flow(
+        nav, win_rect, config, log=log, grabber=grabber, verify=True, recover_on_fail=False, wc=wc
+    )
+    ok = bool(res.get("ok")) if isinstance(res, dict) else bool(res)
+    if ok:
+        log.ok("RECOVER_DONE")
+    else:
+        log.err(f"RECOVER_DONE nhưng enter FAIL step={res.get('failed_step') if isinstance(res, dict) else '?'}")
+    return win_rect
+
+
+def place_and_verify(
+    nav: Navigator,
+    grabber: ScreenGrabber,
+    win_rect: dict,
+    config: dict,
+    side: str,
+    verifier: BetVerifier,
+    log: VisionLogger,
+    wc=None,
+    allow_recover: bool = True,
+) -> bool:
+    from step_verify import log_step, soft_recover_to_home
+
+    bet_points = config.get("bet_points") or {}
+    frame0 = grabber.grab_window(win_rect)
+    verifier.snapshot_before(
+        _crop_roi(frame0, config.get("roi_zone_banker")),
+        _crop_roi(frame0, config.get("roi_zone_player")),
+    )
+    log.event("BET_CLICK", f"side={side}")
+    if not nav.place_bet(bet_points, side):
+        log.err("BET_FAIL missing bet_points")
+        log_step(log, "bet", False, "missing bet_points")
+        return False
+    time.sleep(float(config.get("bet_verify_delay_sec") or 0.6))
+    frame1 = grabber.grab_window(win_rect)
+    result = verifier.verify(
+        side,
+        _crop_roi(frame1, config.get("roi_zone_banker")),
+        _crop_roi(frame1, config.get("roi_zone_player")),
+    )
+    if result["ok"]:
+        log.ok(f"BET_OK side={result['side']} delta={result['delta']} B={result['score_B']} P={result['score_P']}")
+        log_step(log, "bet", True, f"delta={result['delta']}")
+        return True
+    log.warn(
+        f"BET_MISS side={result['side']} delta={result['delta']} "
+        f"B={result['score_B']} P={result['score_P']} — calibrate lại bet_points/ROI zone"
+    )
+    log_step(log, "bet", False, f"delta={result['delta']}")
+
+    # Đặt lỗi → nhập lại URL + vào bàn rồi đặt lại 1 lần (đặt OK thì để im)
+    recover_miss = bool((config.get("step_verify") or {}).get("recover_on_bet_miss", True))
+    if allow_recover and recover_miss and wc is not None:
+        new_rect, rok = soft_recover_to_home(
+            config, wc, nav, grabber, log, reason=f"BET_MISS side={side}", hwnd=getattr(wc, "hwnd", None)
+        )
+        if new_rect:
+            nav.set_window_rect(new_rect)
+            win_rect = new_rect
+        if rok:
+            return place_and_verify(
+                nav, grabber, win_rect, config, side, verifier, log, wc=wc, allow_recover=False
+            )
+    return False
+
+
+def main():
+    log = VisionLogger()
+    log.info("=" * 60)
+    log.info("VISION 24/7 — bet đúng ô + chụp đúng lúc ± tiền")
+    log.info(f"Log file: {log.path}")
+    log.info("Xem PLAN: vision_bot/PLAN.md")
+
+    config = load_config()
+    cfg_path = os.path.join(_HERE, "vision_config.json")
+    if not os.path.exists(cfg_path):
+        save_config(config)
+
+    capture_dir = _ensure_capture_dir(config)
+    target_rect = config.get("window_rect", {"x": 0, "y": 0, "width": 1920, "height": 1080})
+    maximize = bool(config.get("maximize_window", False))
+    profile = _profile_dir(config)
+    wc = WindowController(keyword=config.get("window_title_keyword", "Google Chrome|Chrome"))
+    nav = Navigator()
+    grabber = ScreenGrabber()
+
+    # LUÔN dùng Chrome profile vision — không bám Chrome tay khác (mất cookie)
+    win_rect = lock_window(wc, target_rect, retries=3, maximize=maximize, profile_dir=profile)
+    if not win_rect and config.get("auto_launch_chrome", True):
+        log.info(f"Mở Chrome profile vision + trang login: {login_home_url(config)}")
+        ensure_chrome_up(
+            url=login_home_url(config),
+            profile_dir=profile,
+            chrome_exe=(config.get("chrome_exe") or None) or None,
+            force_restart=False,
+            wait_sec=float(config.get("chrome_boot_wait_sec") or 12),
+            window_w=int(target_rect.get("width") or 1920),
+            window_h=int(target_rect.get("height") or 1080),
+        )
+        win_rect = lock_window(wc, target_rect, retries=30, maximize=maximize, profile_dir=profile)
+
+    if not win_rect:
+        win_rect = full_recover(config, wc, nav, log, "boot_no_browser", grabber=grabber)
+    else:
+        nav.set_window_rect(win_rect)
+        skip = os.environ.get("VISION_SKIP_NAV", "").strip().lower() in ("1", "true", "yes")
+        dry = os.environ.get("VISION_DRY_RUN", "").strip().lower() in ("1", "true", "yes")
+        if dry:
+            log.info("DRY_RUN — khóa browser profile OK, thoát")
+            grabber.close()
+            return
+        if not skip:
+            # Chuỗi tọa độ cố định: Đăng nhập → TK/MK → Submit → Sexy → Chơi ngay → Bàn
+            log.info("Chạy luồng vào Sexy bằng tọa độ + STEP verify")
+            res = run_enter_sexy_flow(
+                nav,
+                win_rect,
+                config,
+                log=log,
+                grabber=grabber,
+                verify=True,
+                recover_on_fail=bool((config.get("step_verify") or {}).get("auto_recover", True)),
+                wc=wc,
+            )
+            if isinstance(res, dict) and not res.get("ok"):
+                log.err(f"Enter flow FAIL @ {res.get('failed_step')} — soft recover URL")
+                from step_verify import soft_recover_to_home
+
+                new_rect, _ = soft_recover_to_home(
+                    config, wc, nav, grabber, log, reason=f"boot_enter:{res.get('failed_step')}", hwnd=wc.hwnd
+                )
+                if new_rect:
+                    win_rect = new_rect
+                    nav.set_window_rect(win_rect)
+
+    table_name = str(config.get("table_name") or "C01").upper()
+    name_service = str(config.get("name_service") or "NS2").upper()
+    pending_bet_side = {"side": None}
+    stats = {"bet_ok": 0, "bet_miss": 0, "settlement_cap": 0}
+
+    verifier = BetVerifier()
+    settlement = SettlementDetector(
+        change_threshold=float(config.get("settlement_threshold") or 8.0),
+        min_dealing_ms=int(config.get("settlement_min_dealing_ms") or 1500),
+        config=config,
+    )
+    tb = int(config.get("capture_taskbar_px") or get_taskbar_height())
+    top_skip = float(config.get("capture_top_skip_frac") or 0.25)
+    log.info(f"Capture crop: bỏ {int(top_skip*100)}% trên + taskbar {tb}px")
+
+    def handle_place_bet(data):
+        side = data.get("betSide") or data.get("side") or config.get("default_bet_side") or "P"
+        pending_bet_side["side"] = side
+        live = lock_window(wc, target_rect, retries=3) or wc.get_rect() or win_rect
+        if live:
+            nav.set_window_rect(live)
+        ok = place_and_verify(nav, grabber, live, config, side, verifier, log, wc=wc)
+        stats["bet_ok" if ok else "bet_miss"] += 1
+
+    def handle_force_capture(data):
+        """Tele báo bàn / force → chụp live ngay, publish sexy_* (giữ 2)."""
+        live = nav.window_rect or win_rect
+        frame = grabber.grab_window(live) if live else None
+        if frame is None:
+            return
+        winner = data.get("resultWinner") or ""
+        kind = "PREVIEW" if not winner or str(winner).upper() in ("X", "PREVIEW", "") else "RESULT"
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        path = os.path.join(capture_dir, f"FORCE_{table_name}_{kind}_{stamp}.png")
+        save_settlement_capture(frame, path, top_skip, tb)
+        pub = publish_sexy_shot(
+            path,
+            table_name,
+            result_winner=winner if kind == "RESULT" else None,
+            round_num=data.get("roundNum"),
+            kind=kind,
+        )
+        log.event("FORCE_CAPTURE", pub or path)
+        if kind == "RESULT" and winner:
+            bridge.notify_screenshot(table_name, pub or path, winner, data.get("roundNum"))
+
+    bridge = VisionBridge(
+        server_url=_server_url(config),
+        name_service=name_service,
+        on_place_bet=handle_place_bet if config.get("listen_socket_place_bet", True) else None,
+        on_force_capture=handle_force_capture,
+    )
+    if config.get("listen_socket_place_bet", True):
+        bridge.start_socket()
+        log.info(f"Socket → {_server_url(config)}")
+    bridge.notify_active_table(table_name)
+
+    detector = VisualDetector(config.get("color_thresholds"))
+    state_machine = GameStateMachine()
+    auto_bet = bool(config.get("auto_bet_on_new_round", False))
+    auto_bet_random = bool(config.get("auto_bet_random", True))
+    default_side = config.get("default_bet_side") or "P"
+    dog = HealthWatchdog(
+        max_no_window_sec=float(config.get("recover_no_window_sec") or 25),
+        max_stale_sec=float(config.get("recover_stale_sec") or 180),
+        recover_cooldown_sec=float(config.get("recover_cooldown_sec") or 45),
+    )
+
+    log.ok(f"Loop start table={table_name} ns={name_service}")
+    log.info(
+        f"DoD: BET_OK + SETTLEMENT | auto_bet={auto_bet} random={auto_bet_random} | giữ 2 sexy_*"
+    )
+    log.info("-" * 60)
+
+    try:
+        while True:
+            live = wc.get_rect()
+            has_window = live is not None
+            if live:
+                nav.set_window_rect(live)
+                win_rect = live
+
+            frame = grabber.grab_window(win_rect) if win_rect else None
+            saw_signal = False
+            timer_status = "EMPTY_OR_UNKNOWN"
+            result_status = "EMPTY_OR_UNKNOWN"
+            bal_c = None
+
+            if frame is not None:
+                timer_c = _crop_roi(frame, config.get("roi_timer"))
+                result_c = _crop_roi(frame, config.get("roi_result"))
+                bal_c = _crop_roi(frame, config.get("roi_balance"))
+                timer_status, _ = detector.detect_color_dominance(timer_c)
+                result_status, _ = detector.detect_color_dominance(result_c)
+                if timer_status != "EMPTY_OR_UNKNOWN" or result_status in (
+                    "BANKER",
+                    "PLAYER",
+                    "TIE_OR_TIMER",
+                ):
+                    saw_signal = True
+
+            state, event = state_machine.update_state(timer_status, result_status)
+
+            if event:
+                et, ed = event
+                if et == "NEW_ROUND_START":
+                    settlement.reset_round()
+                    settlement.on_betting()
+                    log.event("NEW_ROUND", f"#{ed}")
+                    if auto_bet:
+                        if pending_bet_side["side"]:
+                            side = pending_bet_side["side"]
+                        elif auto_bet_random:
+                            side = random.choice(["B", "P"])
+                        else:
+                            side = default_side
+                        pending_bet_side["side"] = None
+                        log.info(f"AUTO_BET random/side={side}")
+                        ok = place_and_verify(
+                            nav, grabber, win_rect, config, side, verifier, log, wc=wc
+                        )
+                        stats["bet_ok" if ok else "bet_miss"] += 1
+                elif et == "DEALING_STARTED":
+                    settlement.on_dealing(bal_c)
+                    log.event("DEALING", "arm settlement detector")
+                elif et == "RESULT_FOUND":
+                    log.event("RESULT_BANNER", str(ed))
+
+            # Chụp ĐÚNG LÚC ± tiền / WIN (mỗi frame, không chỉ khi có event)
+            if frame is not None:
+                sett = settlement.update(bal_c, result_status, frame=frame)
+                if sett:
+                    winner = sett.get("banner") or "EMPTY_OR_UNKNOWN"
+                    wcode = _winner_code(winner if winner != "EMPTY_OR_UNKNOWN" else "X")
+                    if wcode == "X" and state_machine.last_result:
+                        wcode = _winner_code(state_machine.last_result)
+                    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    path = os.path.join(
+                        capture_dir,
+                        f"{table_name}_{wcode}_{stamp}_SETTLE.png",
+                    )
+                    time.sleep(0.5)
+                    frame_shot = grabber.grab_window(win_rect) or frame
+                    save_settlement_capture(frame_shot, path, top_skip, tb)
+                    pub = publish_sexy_shot(
+                        path,
+                        table_name,
+                        result_winner=wcode if wcode != "X" else None,
+                        round_num=state_machine.round_counter,
+                        kind="RESULT",
+                    )
+                    stats["settlement_cap"] += 1
+                    log.ok(
+                        f"SETTLEMENT capture reason={sett['reason']} delta={sett['delta']} "
+                        f"banner={sett['banner']} → {pub or path}"
+                    )
+                    notify_win = wcode if wcode != "X" else _winner_code(state_machine.last_result or "")
+                    if notify_win in ("B", "P", "T"):
+                        bridge.notify_screenshot(
+                            table_name,
+                            pub or path,
+                            notify_win,
+                            state_machine.round_counter,
+                        )
+                    log.info(
+                        f"STATS bet_ok={stats['bet_ok']} bet_miss={stats['bet_miss']} "
+                        f"settle_cap={stats['settlement_cap']}"
+                    )
+
+            if config.get("auto_recover", True):
+                need, reason = dog.need_recover(has_window, saw_signal)
+                if need and reason != "recover_rate_limited":
+                    dog.note_recover()
+                    new_rect = full_recover(config, wc, nav, log, reason, grabber=grabber)
+                    if new_rect:
+                        win_rect = new_rect
+                        bridge.notify_active_table(table_name)
+                        state_machine = GameStateMachine()
+                        settlement = SettlementDetector(
+                            change_threshold=float(config.get("settlement_threshold") or 8.0),
+                            min_dealing_ms=int(config.get("settlement_min_dealing_ms") or 1500),
+                            config=config,
+                        )
+
+            time.sleep(0.05)
+    except KeyboardInterrupt:
+        log.info("Stop Ctrl+C")
+        log.info(
+            f"FINAL STATS bet_ok={stats['bet_ok']} bet_miss={stats['bet_miss']} "
+            f"settle_cap={stats['settlement_cap']}"
+        )
+    finally:
+        grabber.close()
+
+
+if __name__ == "__main__":
+    main()

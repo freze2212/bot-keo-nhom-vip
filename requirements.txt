@@ -1,0 +1,14 @@
+python-dotenv==1.0.0
+schedule==1.2.1
+Telethon
+Pillow
+pyautogui
+opencv-python
+mss
+python-socketio[client]
+websocket-client
+pywin32
+pygetwindow
+psutil
+requests
+numpy

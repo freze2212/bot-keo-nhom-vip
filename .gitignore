@@ -1,0 +1,128 @@
+# Thông tin nhạy cảm
+.env
+.env.bak*
+.env.bak-*
+
+# File dữ liệu runtime
+posts.json
+bot.lock
+*.lock
+bot_*.lock
+
+# File log / backup
+*.log
+logs/
+
+# Thư mục cache, pyc
+__pycache__/
+*.pyc
+venv/
+
+# Bỏ qua file user_session (Telethon session)
+user_session*
+*.session
+*.session-journal
+telegram_otp.txt
+telegram_2fa.txt
+
+# Bỏ qua thư mục 311
+311/
+
+# Node dependencies
+node_modules/
+public/screenshots/
+diag-*.png
+diag-*.json
+*.rar
+hotudong.rar
+hotudong/
+downloaded_*.png
+
+# Script tạm / debug / ops (không đưa lên repo)
+_*.py
+run_local_*.py
+RUN-LOCAL-*.bat
+check_*.py
+vps_*.py
+deploy_*.py
+test_*.py
+inspect_*.py
+read_*.py
+monitor_*.py
+diagnose_*.py
+analyze_*.py
+search_*.py
+request_*.py
+signin_*.py
+sign_in_*.py
+login_*.py
+send_otp*.py
+copy_*.py
+list_*.py
+find_*.py
+walk_*.py
+print_*.py
+quick_*.py
+verify_*.py
+view_*.py
+upload_*.py
+download_*.py
+exec_*.py
+ensure_*.py
+finish_*.py
+force_*.py
+hotfix_*.py
+interactive_*.py
+deep_*.py
+setup_*.py
+set_*.py
+start_*.py
+submit_*.py
+install_*.py
+manage_windows_services.py
+query_services.py
+auto_restart_sessions.py
+run_health_test.py
+run_list_dialogs.py
+run_session2_winreg.py
+run_submit_hash.py
+single_step_login.py
+do_copy.py
+final_fix.py
+
+# Backup / file test
+*.pre-24x7
+*.pre-signal-fix
+*.pre-click-fix
+*.bak.*
+*.backup.*
+sexy_*.png
+local-test-reload-error.png
+probe-room-*.json
+fe-check-*.json
+vps_logs_output.txt
+reload-click-captures.jsonl
+
+# Chỉ giữ 1 ecosystem PM2
+ecosystem.config.cjs
+ecosystem.config.json
+ecosystem.multi.config.js
+ecosystem.config.production.js
+ecosystem.config.sessions.js
+server.b.js
+
+# IDE
+.vscode/
+
+# Vision bot runtime junk (không push)
+vision_bot/captures/
+vision_bot/logs/
+vision_bot/chrome_user_data_vision/
+vision_bot/__pycache__/
+vision_bot/*.log
+vision_bot/STOP_SETTLE
+chrome_user_data/
+chrome_user_data_vision/
+withdraw_screenshot.png
+withdraw_page.html
+withdraw_elements.json
