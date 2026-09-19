@@ -56,6 +56,7 @@ request_*.py
 signin_*.py
 sign_in_*.py
 login_*.py
+!vision_bot/login_flow.py
 send_otp*.py
 copy_*.py
 list_*.py
