@@ -79,12 +79,24 @@ def kill_profile_chrome(profile_dir: str) -> int:
 
 
 def process_uses_profile(pid: int, profile_dir: str) -> bool:
+    """True nếu pid (hoặc cha gần) là Chrome đúng user-data-dir vision."""
     marker = _profile_marker(profile_dir)
     try:
         import psutil
 
-        cmd = os.path.normcase(" ".join(psutil.Process(pid).cmdline() or [])).lower()
-        return marker in cmd
+        proc = psutil.Process(pid)
+        for _ in range(4):
+            try:
+                cmd = os.path.normcase(" ".join(proc.cmdline() or [])).lower()
+                if marker in cmd:
+                    return True
+            except Exception:
+                pass
+            try:
+                proc = psutil.Process(proc.ppid())
+            except Exception:
+                break
+        return False
     except Exception:
         return False
 

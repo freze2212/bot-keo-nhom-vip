@@ -106,15 +106,74 @@ def scroll_relative(window_rect: dict | None, rel_x: int, rel_y: int, notches: i
 
 
 def focus_hwnd(hwnd) -> None:
-    """Đưa cửa sổ browser lên trước khi gõ (tránh input vào Cursor/terminal)."""
+    """Đưa cửa sổ browser lên TRƯỚC — tránh gõ password vào Cursor/terminal."""
     if not hwnd:
         return
     try:
-        user32.ShowWindow(int(hwnd), 9)  # SW_RESTORE
-        user32.SetForegroundWindow(int(hwnd))
-        time.sleep(0.2)
+        import win32con
+        import win32gui
+        import win32process
+        import win32api
+
+        hwnd = int(hwnd)
+        if win32gui.IsIconic(hwnd):
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+        # TOPMOST tạm để đè Cursor/IDE đang fullscreen
+        win32gui.SetWindowPos(
+            hwnd,
+            win32con.HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW,
+        )
+        fg = win32gui.GetForegroundWindow()
+        cur_tid = win32api.GetCurrentThreadId()
+        fg_tid = 0
+        if fg:
+            fg_tid, _ = win32process.GetWindowThreadProcessId(fg)
+        tgt_tid, _ = win32process.GetWindowThreadProcessId(hwnd)
+        if fg_tid:
+            win32process.AttachThreadInput(cur_tid, fg_tid, True)
+        win32process.AttachThreadInput(cur_tid, tgt_tid, True)
+        try:
+            win32gui.BringWindowToTop(hwnd)
+            win32gui.SetForegroundWindow(hwnd)
+        finally:
+            win32process.AttachThreadInput(cur_tid, tgt_tid, False)
+            if fg_tid:
+                win32process.AttachThreadInput(cur_tid, fg_tid, False)
+        time.sleep(0.25)
+        # Bỏ TOPMOST sau khi đã lên trước
+        win32gui.SetWindowPos(
+            hwnd,
+            win32con.HWND_NOTOPMOST,
+            0,
+            0,
+            0,
+            0,
+            win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW,
+        )
+        time.sleep(0.1)
     except Exception:
-        pass
+        try:
+            user32.ShowWindow(int(hwnd), 9)
+            user32.SetForegroundWindow(int(hwnd))
+            time.sleep(0.2)
+        except Exception:
+            pass
+
+
+def foreground_is_hwnd(hwnd) -> bool:
+    if not hwnd:
+        return False
+    try:
+        import win32gui
+
+        return int(win32gui.GetForegroundWindow()) == int(hwnd)
+    except Exception:
+        return False
 
 
 def type_text_os(text: str, clear_first: bool = True, interval: float = 0.045) -> None:

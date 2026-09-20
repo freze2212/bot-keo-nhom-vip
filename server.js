@@ -715,6 +715,47 @@ app.get("/api/latest-screenshot", (req, res) => {
   return res.json({ success: true, data });
 });
 
+/** Cửa vision vừa đặt — forward hô cùng nguồn này. */
+app.get("/api/latest-vision-bet", (req, res) => {
+  const key = normTableKey(req.query.tableName);
+  if (!key) {
+    return res.status(400).json({ success: false, message: "Missing tableName" });
+  }
+  const ns = String(req.query.nameService || "").trim().toUpperCase();
+  const maxAgeMs = Number(req.query.maxAgeMs) || 300000;
+  const minHoAt = Number(req.query.minHoAt) || 0;
+  const now = Date.now();
+  const arr = mainHoSignalsByTable[key] || [];
+  const pool = arr.filter((s) => {
+    if (s.skipped) return false;
+    if (ns && s.nameService && s.nameService !== ns) return false;
+    if (now - Number(s.hoAt || 0) > maxAgeMs) return false;
+    if (minHoAt && Number(s.hoAt || 0) < minHoAt) return false;
+    return true;
+  });
+  const newest = pool
+    .slice()
+    .sort((a, b) => (b.hoAt - a.hoAt) || (b.signalId - a.signalId))[0];
+  if (!newest) {
+    return res.json({ success: false, data: null, message: "no_bet" });
+  }
+  return res.json({
+    success: true,
+    data: {
+      tableName: newest.tableName,
+      betSide: newest.betSide,
+      nameService: newest.nameService,
+      roundCount: newest.roundCount,
+      hoAt: newest.hoAt,
+      signalId: newest.signalId,
+      resultCompleted: !!newest.resultCompleted,
+      resultWinner: newest.resultWinner || null,
+      resultOutcome: newest.resultOutcome || null,
+      resultFilepath: newest.resultFilepath || null,
+    },
+  });
+});
+
 app.post("/api/notify-main-ho", (req, res) => {
   const { tableName, betSide, side, nameService, hoAt, beforeStamp, roundCount } =
     req.body || {};

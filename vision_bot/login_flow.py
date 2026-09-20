@@ -18,7 +18,7 @@ import time
 
 import pyautogui
 
-from input_click import click_relative, focus_hwnd, type_text_os
+from input_click import click_relative, focus_hwnd, type_text_os, foreground_is_hwnd
 
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0.05
@@ -494,15 +494,23 @@ def run_enter_sexy_flow(
             _click_point(win_rect, step, f"table_popup_{i}_{step.get('name', '')}", log)
         time.sleep(0.4)
 
-    # Final on_table check
+    # Final on_table check — chưa vào bàn thật thì FAIL (hard recover kill Chrome)
     if do_verify and grabber is not None:
         frame_f = _grab()
         ok_t, det_t = check_on_table(frame_f, config)
-        out_steps["on_table"] = ok_t
-        log_step(log, "on_table", ok_t, det_t)
-        save_step_shot(frame_f, "on_table", config, log)
         if not ok_t:
+            wait_t = float((config.get("step_verify") or {}).get("on_table_timeout_sec") or 20)
+            deadline = time.time() + min(15.0, wait_t)
+            while time.time() < deadline and not ok_t:
+                time.sleep(0.5)
+                frame_f = _grab()
+                ok_t, det_t = check_on_table(frame_f, config)
+        if not ok_t:
+            out_steps["on_table"] = False
             return _fail("on_table", det_t)
+        out_steps["on_table"] = True
+        log_step(log, "on_table", True, det_t)
+        save_step_shot(frame_f, "on_table", config, log)
 
     _log("Xong luồng chuẩn (… → bàn → scroll)")
     return {"ok": True, "failed_step": None, "steps": out_steps}

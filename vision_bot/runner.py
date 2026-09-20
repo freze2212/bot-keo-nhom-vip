@@ -41,7 +41,7 @@ from visual_detector import VisualDetector, GameStateMachine
 from bridge import VisionBridge
 from chrome_launcher import ensure_chrome_up
 from settlement import SettlementDetector, save_settlement_capture, get_taskbar_height
-from bet_window import BetVerifier
+from bet_window import BetVerifier, betting_open_score
 from login_flow import run_enter_sexy_flow, login_home_url
 from shot_store import publish_sexy_shot
 import random
@@ -150,6 +150,43 @@ def _winner_code(label: str) -> str:
     if "TIE" in u or u == "T":
         return "T"
     return "X"
+
+
+def _infer_winner_from_bet(side, outcome, reason="") -> str:
+    """Banner trống → suy winner từ cửa đã hô + WIN+/LOSE- toast."""
+    side_u = str(side or "").strip().upper()
+    o = str(outcome or "").upper()
+    r = str(reason or "").upper()
+    if "TIE" in o or r.endswith("_TIE") or "_TIE" in r:
+        return "T"
+    if side_u not in ("B", "P"):
+        return "X"
+    won = ("WIN" in o and "TIE" not in o) or "LIVE_WIN" in r or "BUF_WIN" in r or "WATCH_WIN" in r
+    lost = (
+        "LOSE" in o
+        or "LOSS" in o
+        or "LIVE_LOSE" in r
+        or "BUF_LOSE" in r
+        or "WATCH_LOSE" in r
+    )
+    if won:
+        return side_u
+    if lost:
+        return "P" if side_u == "B" else "B"
+    return "X"
+
+
+def _outcome_key_from_settlement(outcome, reason="") -> str | None:
+    """Toast settlement → WIN / LOSS / TIE (caption Telegram)."""
+    o = str(outcome or "").upper()
+    r = str(reason or "").upper()
+    if "TIE" in o or r.endswith("_TIE") or "_TIE" in r:
+        return "TIE"
+    if "LOSE" in o or "LOSS" in o or "LIVE_LOSE" in r or "BUF_LOSE" in r or "WATCH_LOSE" in r:
+        return "LOSS"
+    if ("WIN" in o and "TIE" not in o) or "LIVE_WIN" in r or "BUF_WIN" in r or "WATCH_WIN" in r:
+        return "WIN"
+    return None
 
 
 def _alert(log: VisionLogger, msg: str) -> None:
@@ -280,11 +317,18 @@ def place_and_verify(
     )
     log_step(log, "bet", False, f"delta={result['delta']}")
 
-    # Đặt lỗi → nhập lại URL + vào bàn rồi đặt lại 1 lần (đặt OK thì để im)
+    # Đặt lỗi → kill Chrome + login lại rồi đặt lại 1 lần
     recover_miss = bool((config.get("step_verify") or {}).get("recover_on_bet_miss", True))
     if allow_recover and recover_miss and wc is not None:
         new_rect, rok = soft_recover_to_home(
-            config, wc, nav, grabber, log, reason=f"BET_MISS side={side}", hwnd=getattr(wc, "hwnd", None)
+            config,
+            wc,
+            nav,
+            grabber,
+            log,
+            reason=f"BET_MISS side={side}",
+            hwnd=getattr(wc, "hwnd", None),
+            skip_login=False,
         )
         if new_rect:
             nav.set_window_rect(new_rect)
@@ -355,11 +399,18 @@ def main():
                 wc=wc,
             )
             if isinstance(res, dict) and not res.get("ok"):
-                log.err(f"Enter flow FAIL @ {res.get('failed_step')} — soft recover URL")
+                log.err(f"Enter flow FAIL @ {res.get('failed_step')} — HARD recover kill Chrome")
                 from step_verify import soft_recover_to_home
 
                 new_rect, _ = soft_recover_to_home(
-                    config, wc, nav, grabber, log, reason=f"boot_enter:{res.get('failed_step')}", hwnd=wc.hwnd
+                    config,
+                    wc,
+                    nav,
+                    grabber,
+                    log,
+                    reason=f"boot_enter:{res.get('failed_step')}",
+                    hwnd=wc.hwnd,
+                    skip_login=False,
                 )
                 if new_rect:
                     win_rect = new_rect
@@ -368,6 +419,7 @@ def main():
     table_name = str(config.get("table_name") or "C01").upper()
     name_service = str(config.get("name_service") or "NS2").upper()
     pending_bet_side = {"side": None}
+    last_vision_bet = {"side": None, "round": None}
     stats = {"bet_ok": 0, "bet_miss": 0, "settlement_cap": 0}
 
     verifier = BetVerifier()
@@ -378,16 +430,24 @@ def main():
     )
     tb = int(config.get("capture_taskbar_px") or get_taskbar_height())
     top_skip = float(config.get("capture_top_skip_frac") or 0.25)
-    log.info(f"Capture crop: bỏ {int(top_skip*100)}% trên + taskbar {tb}px")
+    side_skip = float(config.get("capture_side_skip_frac") or 0.10)
+    log.info(
+        f"Capture crop: bỏ {int(top_skip*100)}% trên + {int(side_skip*100)}% mỗi bên "
+        f"+ taskbar {tb}px"
+    )
 
     def handle_place_bet(data):
         side = data.get("betSide") or data.get("side") or config.get("default_bet_side") or "P"
         pending_bet_side["side"] = side
-        live = lock_window(wc, target_rect, retries=3) or wc.get_rect() or win_rect
+        live = lock_window(wc, target_rect, retries=3, maximize=maximize, profile_dir=profile) or wc.get_rect() or win_rect
         if live:
             nav.set_window_rect(live)
         ok = place_and_verify(nav, grabber, live, config, side, verifier, log, wc=wc)
         stats["bet_ok" if ok else "bet_miss"] += 1
+        if ok:
+            last_vision_bet["side"] = side
+            bridge.notify_vision_bet(table_name, side, last_vision_bet.get("round"))
+            log.event("VISION_BET_PUBLISH", f"side={side} (socket place_bet)")
 
     def handle_force_capture(data):
         """Tele báo bàn / force → chụp live ngay, publish sexy_* (giữ 2)."""
@@ -399,7 +459,7 @@ def main():
         kind = "PREVIEW" if not winner or str(winner).upper() in ("X", "PREVIEW", "") else "RESULT"
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = os.path.join(capture_dir, f"FORCE_{table_name}_{kind}_{stamp}.png")
-        save_settlement_capture(frame, path, top_skip, tb)
+        save_settlement_capture(frame, path, top_skip, tb, side_skip_frac=side_skip)
         pub = publish_sexy_shot(
             path,
             table_name,
@@ -435,9 +495,11 @@ def main():
 
     log.ok(f"Loop start table={table_name} ns={name_service}")
     log.info(
-        f"DoD: BET_OK + SETTLEMENT | auto_bet={auto_bet} random={auto_bet_random} | giữ 2 sexy_*"
+        f"DoD: BET_OK + SETTLEMENT | auto_bet={auto_bet} random={auto_bet_random} | giữ 6 sexy_*"
     )
     log.info("-" * 60)
+    last_profile_check = 0.0
+    last_frame = None
 
     try:
         while True:
@@ -448,18 +510,58 @@ def main():
                 win_rect = live
 
             frame = grabber.grab_window(win_rect) if win_rect else None
+            last_frame = frame
             saw_signal = False
             timer_status = "EMPTY_OR_UNKNOWN"
             result_status = "EMPTY_OR_UNKNOWN"
             bal_c = None
 
+            # Mỗi 30s: chắc hwnd đúng Chrome profile vision
+            now = time.time()
+            if now - last_profile_check >= 30.0:
+                last_profile_check = now
+                ok_prof = False
+                try:
+                    from chrome_launcher import process_uses_profile
+                    import win32gui
+                    import win32process
+
+                    if wc.hwnd and win32gui.IsWindow(wc.hwnd):
+                        _, pid = win32process.GetWindowThreadProcessId(wc.hwnd)
+                        ok_prof = process_uses_profile(pid, profile)
+                except Exception:
+                    ok_prof = False
+                if not ok_prof and last_frame is not None:
+                    try:
+                        from step_verify import check_on_table
+
+                        on_tbl, _ = check_on_table(last_frame, config)
+                        if on_tbl:
+                            ok_prof = True
+                    except Exception:
+                        pass
+                if not ok_prof:
+                    log.warn("HWND lệch profile vision — khóa lại đúng Chrome profile")
+                    live2 = lock_window(
+                        wc, target_rect, retries=5, maximize=maximize, profile_dir=profile
+                    )
+                    if live2:
+                        win_rect = live2
+                        nav.set_window_rect(live2)
+                        frame = grabber.grab_window(win_rect)
+                        last_frame = frame
+
             if frame is not None:
-                timer_c = _crop_roi(frame, config.get("roi_timer"))
+                # Cửa đặt: dùng bet_window (HSV neon góc live + Chúc may mắn)
+                # — không dùng roi_timer BGR giữa màn (luôn EMPTY → không AUTO_BET).
+                sc = betting_open_score(frame, config)
+                timer_status = (
+                    "TIE_OR_TIMER" if sc.get("open") else "EMPTY_OR_UNKNOWN"
+                )
                 result_c = _crop_roi(frame, config.get("roi_result"))
                 bal_c = _crop_roi(frame, config.get("roi_balance"))
-                timer_status, _ = detector.detect_color_dominance(timer_c)
                 result_status, _ = detector.detect_color_dominance(result_c)
-                if timer_status != "EMPTY_OR_UNKNOWN" or result_status in (
+                if sc.get("open") or float(sc.get("timer_green") or 0) > 0.02 or result_status in (
                     "BANKER",
                     "PLAYER",
                     "TIE_OR_TIMER",
@@ -487,6 +589,11 @@ def main():
                             nav, grabber, win_rect, config, side, verifier, log, wc=wc
                         )
                         stats["bet_ok" if ok else "bet_miss"] += 1
+                        if ok:
+                            last_vision_bet["side"] = side
+                            last_vision_bet["round"] = ed
+                            bridge.notify_vision_bet(table_name, side, ed)
+                            log.event("VISION_BET_PUBLISH", f"side={side} round={ed}")
                 elif et == "DEALING_STARTED":
                     settlement.on_dealing(bal_c)
                     log.event("DEALING", "arm settlement detector")
@@ -501,25 +608,41 @@ def main():
                     wcode = _winner_code(winner if winner != "EMPTY_OR_UNKNOWN" else "X")
                     if wcode == "X" and state_machine.last_result:
                         wcode = _winner_code(state_machine.last_result)
+                    if wcode == "X":
+                        wcode = _infer_winner_from_bet(
+                            last_vision_bet.get("side"),
+                            sett.get("outcome"),
+                            sett.get("reason"),
+                        )
                     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     path = os.path.join(
                         capture_dir,
                         f"{table_name}_{wcode}_{stamp}_SETTLE.png",
                     )
                     time.sleep(0.5)
-                    frame_shot = grabber.grab_window(win_rect) or frame
-                    save_settlement_capture(frame_shot, path, top_skip, tb)
+                    frame_shot = grabber.grab_window(win_rect)
+                    if frame_shot is None:
+                        frame_shot = frame
+                    save_settlement_capture(
+                        frame_shot, path, top_skip, tb, side_skip_frac=side_skip
+                    )
+                    out_key = _outcome_key_from_settlement(
+                        sett.get("outcome"), sett.get("reason")
+                    )
                     pub = publish_sexy_shot(
                         path,
                         table_name,
                         result_winner=wcode if wcode != "X" else None,
                         round_num=state_machine.round_counter,
                         kind="RESULT",
+                        result_outcome=out_key,
                     )
                     stats["settlement_cap"] += 1
                     log.ok(
-                        f"SETTLEMENT capture reason={sett['reason']} delta={sett['delta']} "
-                        f"banner={sett['banner']} → {pub or path}"
+                        f"SETTLEMENT capture reason={sett['reason']} "
+                        f"outcome={sett.get('outcome')} →{out_key} delta={sett['delta']} "
+                        f"banner={sett['banner']} wcode={wcode} "
+                        f"bet={last_vision_bet.get('side')} → {pub or path}"
                     )
                     notify_win = wcode if wcode != "X" else _winner_code(state_machine.last_result or "")
                     if notify_win in ("B", "P", "T"):

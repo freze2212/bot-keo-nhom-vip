@@ -94,6 +94,21 @@ def winner_from_shot_filename(filepath):
     return None
 
 
+def outcome_from_shot_filename(filepath):
+    """Toast settlement gắn trên tên file: _WIN_ / _LOSS_ / _TIE_ → caption."""
+    if not filepath:
+        return None
+    bname = os.path.basename(filepath).upper()
+    # Ưu tiên tag outcome tường minh (tránh nhầm _WB_ với WIN)
+    if "_LOSS_" in bname or "_LOSE-" in bname or "_LOSE_" in bname:
+        return "LOSS"
+    if "_TIE_" in bname or "WIN+TIE" in bname:
+        return "TIE"
+    if "_WIN_" in bname or "_WIN+_" in bname:
+        return "WIN"
+    return None
+
+
 def resolve_shot_winner(filepath, api_winner=None):
     """Winner trên tên file (ảnh gửi đi) thắng API — tránh Hòa đè lên ảnh CÁI/CON."""
     file_w = winner_from_shot_filename(filepath)
@@ -399,14 +414,15 @@ def get_newest_shot_any(table_name, newer_than_mtime=None):
     return best
 
 
-def list_main_shots_for_table(table_name, winners=None):
-    """Ảnh sexy_* của main trên bàn, mới nhất trước. PREVIEW không tính vào kết quả B/P/T."""
+def list_main_shots_for_table(table_name, winners=('B', 'P', 'T'), include_preview=False):
+    """Ảnh sexy_* của main trên bàn, mới nhất trước. Mặc định bỏ PREVIEW.
+    winners=None → không lọc B/P/T (mọi sexy_*)."""
     search_dirs = [
         os.path.join(ROOT_DIR, 'public', 'screenshots'),
         os.path.join(ROOT_DIR, 'screenshots'),
     ]
     tbl_norm = str(table_name or '').lower()
-    allowed = winners or ('B', 'P', 'T')
+    allowed = winners  # None = không lọc winner
     found = []
     for sdir in search_dirs:
         if not os.path.exists(sdir):
@@ -416,7 +432,7 @@ def list_main_shots_for_table(table_name, winners=None):
                 low = name.lower()
                 if not low.startswith('sexy_') or not low.endswith(IMAGE_EXTENSIONS):
                     continue
-                if 'preview' in low:
+                if (not include_preview) and 'preview' in low:
                     continue
                 if f"_{tbl_norm}_" not in low and f"{tbl_norm}_" not in low:
                     continue
@@ -424,7 +440,7 @@ def list_main_shots_for_table(table_name, winners=None):
                 if not is_real_screenshot_file(path):
                     continue
                 win = resolve_shot_winner(path)
-                if win not in allowed:
+                if allowed is not None and win not in allowed:
                     continue
                 found.append((os.path.getmtime(path), path, win))
         except OSError:
@@ -442,9 +458,48 @@ def list_main_shots_for_table(table_name, winners=None):
     return out
 
 
+def get_newest_shot_after(table_name, after_mtime, include_preview=True):
+    """Ảnh sexy_* mới nhất có mtime > after_mtime (sau hô). Không lấy file cũ hơn."""
+    shots = list_main_shots_for_table(
+        table_name, winners=None, include_preview=include_preview
+    )
+    for mtime, path, win in shots:
+        if mtime > after_mtime and path and os.path.exists(path):
+            return path, win, mtime
+    return None, None, None
+
+
+def pick_virtual_outcome_and_side(shot_winner, win_rate=0.8, loss_rate=0.15, tie_rate=0.05):
+    """
+    Ảo: đã biết ván cũ ra B/P/T → chọn outcome theo tỉ lệ rồi hô cho khớp.
+    WIN → hô đúng cửa thắng; LOSS → hô cửa ngược; TIE → hô B/P ngẫu nhiên.
+    """
+    outcome = random.choices(
+        ["WIN", "LOSS", "TIE"],
+        weights=[float(win_rate), float(loss_rate), float(tie_rate)],
+    )[0]
+    w = normalize_side(shot_winner)
+    if outcome == "TIE":
+        bet_side = random.choice(["B", "P"])
+    elif w in ("B", "P"):
+        if outcome == "WIN":
+            bet_side = w
+        else:
+            bet_side = "P" if w == "B" else "B"
+    else:
+        # Shot hòa (T) hoặc không rõ: chỉ hô được WIN/LOSS kiểu random cửa
+        bet_side = random.choice(["B", "P"])
+        if outcome != "TIE":
+            # Không biết cửa thật → giữ outcome nhưng hô random (caption vẫn theo outcome)
+            pass
+    return outcome, bet_side
+
+
 def pick_old_main_shot(table_name, max_age_s=None):
-    """Ảo: ảnh round cũ sexy_* (ưu tiên shot mới nhì). Không skip vì tuổi file."""
-    shots = list_main_shots_for_table(table_name)
+    """Ảo: ảnh round cũ sexy_* đã xong (ưu tiên mới nhì, cửa B/P để hô WIN/LOSS)."""
+    shots = list_main_shots_for_table(table_name, winners=('B', 'P'))
+    if not shots:
+        shots = list_main_shots_for_table(table_name, winners=('B', 'P', 'T'))
     if not shots:
         return None, None
     for item in (shots[1:] if len(shots) >= 2 else shots):
@@ -638,6 +693,45 @@ def min_source_messages_for_config(config):
     except (TypeError, ValueError):
         pass
     return needed
+
+
+def build_outcome_caption(outcome, bet_amount_label):
+    """Text THẮNG/THUA/HÒA gửi dưới ảnh (caption), không stamp lên ảnh."""
+    amount = parse_bet_amount_numeric(bet_amount_label) or 1000
+    key = str(outcome or "").upper()
+    if key == "WIN":
+        return f"THẮNG +{amount}"
+    if key == "LOSS":
+        return f"THUA -{amount}"
+    return "HÒA 0"
+
+
+def fetch_latest_vision_bet(table_name, name_service=None, max_age_ms=300000, min_ho_at=None):
+    """Cửa vision vừa đặt — cùng nguồn hô Telegram."""
+    try:
+        params = {
+            "tableName": str(table_name or "").strip().upper(),
+            "nameService": str(name_service or "").strip().upper(),
+            "maxAgeMs": int(max_age_ms),
+        }
+        if min_ho_at:
+            params["minHoAt"] = int(min_ho_at)
+        q = urllib.parse.urlencode(params)
+        url = f"{API_BASE_URL.rstrip('/')}/api/latest-vision-bet?{q}"
+        req = urllib.request.Request(url, headers=get_api_headers(), method="GET")
+        with urllib.request.urlopen(req, timeout=4) as res:
+            body = json.loads(res.read().decode("utf-8"))
+        if not body.get("success") or not body.get("data"):
+            return None
+        side = str(body["data"].get("betSide") or "").strip().upper()
+        if side.startswith("B"):
+            return "B"
+        if side.startswith("P"):
+            return "P"
+        return None
+    except Exception as ex:
+        log(f"[VISION BET] lỗi lấy cửa: {ex}")
+        return None
 
 
 def stamp_outcome_on_image(src_path, outcome, bet_amount_label, out_dir=None):
@@ -1911,11 +2005,11 @@ class TelegramForwardBot:
 
     async def _execute_prior_round_flow(self, messages_to_send, entity, forward_idx, send_text):
         """
-        Luồng: tin1 tin2 → ảnh báo bàn (round cũ) → tin3 → hô 🔵/🔴 ngẫu nhiên
-        → ảnh kết quả stamp THẮNG/THUA/HÒA → tin outcome → tin kết thúc.
-        Ảo: ảnh kết quả = round cũ. Thật: ảnh kết quả = round mới.
+        Luồng: tin1 tin2 → ảnh báo bàn → tin3 → hô → ảnh kết quả (caption, không stamp).
+        THẬT: hô match_vision → chỉ gửi sexy_* có mtime > sau hô (không fallback).
+        ẢO: lấy shot ván cũ đã biết B/P → hô theo win/loss/tie rate → gửi đúng shot đó.
         """
-        step = config_step_delay(self.config, 5)
+        step = config_step_delay(self.config, 20)
         is_virtual = bool(self.config.get("is_virtual"))
         self.log(
             f"BẮT ĐẦU PHIÊN PRIOR-ROUND "
@@ -1952,6 +2046,18 @@ class TelegramForwardBot:
         old_win = shots[1][2] if len(shots) >= 2 else (shots[0][2] if shots else None)
         new_win = shots[0][2] if shots else None
 
+        # Ảo: bắt buộc dùng shot ván ĐÃ XONG (ưu tiên mới nhì, cửa B/P để hô WIN/LOSS)
+        if is_virtual:
+            picked, picked_win = pick_old_main_shot(self.session_table)
+            if picked:
+                old_shot, old_win = picked, picked_win
+                self.log(
+                    f"[ẢO] Chọn shot ván cũ để hô: {os.path.basename(old_shot)} "
+                    f"winner={old_win}"
+                )
+            elif not old_shot:
+                self.log("[ẢO] Chưa có sexy_* WB/WP/WT trên disk — không hô được")
+
         if self.config.get("send_table_preview", True):
             cap = str(
                 self.config.get(
@@ -1970,63 +2076,151 @@ class TelegramForwardBot:
             step,
         )
 
-        # Hô: khớp winner ảnh round trước (ảo) hoặc ngẫu nhiên (thật / mặc định)
-        result_shot = old_shot if is_virtual else (new_shot or old_shot)
-        result_win = old_win if is_virtual else (new_win or old_win)
-        ho_mode = str(self.config.get("ho_mode") or ("match_shot" if is_virtual else "random")).lower()
-        if ho_mode == "match_shot" and result_win in ("B", "P"):
-            bet_side = result_win
+        # --- HÔ + ẢNH KẾT QUẢ ---
+        # THẬT: hô theo vision → chỉ gửi capture mtime > sau hô (không fallback).
+        # ẢO: dùng shot ván cũ (đã biết B/P/T) → hô để đạt ~80% WIN / 15% LOSS / 5% TIE
+        #      → gửi đúng shot ván đó (không chờ capture mới, không folder images/*).
+        ho_mode = str(
+            self.config.get("ho_mode")
+            or ("match_shot" if is_virtual else "random")
+        ).lower()
+        bet_side = None
+        outcome_key = None
+        result_shot = None
+        result_win = None
+
+        if is_virtual:
+            if not old_shot or not os.path.exists(old_shot):
+                self.log("[ẢO] Không có shot ván cũ — bỏ ca hô/kết quả")
+                return
+            result_shot, result_win = old_shot, old_win
+            outcome_key, bet_side = pick_virtual_outcome_and_side(
+                old_win,
+                win_rate=float(self.config.get("win_rate", 0.8)),
+                loss_rate=float(self.config.get("loss_rate", 0.15)),
+                tie_rate=float(self.config.get("tie_rate", 0.05)),
+            )
+            self.log(
+                f"[ẢO] Shot ván cũ {os.path.basename(old_shot)} winner={old_win} "
+                f"→ outcome={outcome_key} hô={bet_side} "
+                f"(rates {self.config.get('win_rate', 0.8)}/"
+                f"{self.config.get('loss_rate', 0.15)}/"
+                f"{self.config.get('tie_rate', 0.05)})"
+            )
         else:
-            bet_side = random.choice(["B", "P"])
+            # THẬT: nghỉ → lắng nghe cửa vision
+            if ho_mode == "match_vision":
+                ho_pre_wait = int(self.config.get("ho_pre_wait_sec") or step or 20)
+                ho_listen_timeout = int(self.config.get("ho_listen_timeout_sec") or 90)
+                listen_from_ms = int(time.time() * 1000)
+                self.log(
+                    f"[HÔ] Nghỉ tối thiểu {ho_pre_wait}s rồi lắng nghe cửa vision "
+                    f"(timeout {ho_listen_timeout}s)..."
+                )
+                await asyncio.sleep(ho_pre_wait)
+                deadline = time.time() + ho_listen_timeout
+                while time.time() < deadline:
+                    bet_side = fetch_latest_vision_bet(
+                        self.session_table,
+                        self.name_service,
+                        min_ho_at=listen_from_ms,
+                    )
+                    if bet_side:
+                        self.log(f"[HÔ] Lắng nghe được cửa vision → {bet_side}")
+                        break
+                    await asyncio.sleep(0.5)
+                if not bet_side:
+                    self.log("[HÔ] Hết thời gian lắng nghe — chưa có lệnh vision mới")
+            if not bet_side and ho_mode == "match_shot" and new_win in ("B", "P"):
+                bet_side = new_win
+            if not bet_side:
+                bet_side = random.choice(["B", "P"])
+                if ho_mode == "match_vision":
+                    self.log(f"[HÔ] Fallback random {bet_side}")
+
         bet_text_base = "🔵 CON" if bet_side == "P" else "🔴 CÁI"
         bet_text_to_send = format_bet_for_config(self.config, bet_text_base)
         await send_text(bet_text_to_send, f"Đã gửi tin HÔ {bet_text_to_send}")
+        after_ho_mtime = time.time()
         await asyncio.sleep(step)
 
-        if not result_shot or not os.path.exists(result_shot):
-            # Fallback folder ảo nếu chưa có sexy_*
-            outcome_key = random.choices(
-                ["WIN", "LOSS", "TIE"],
-                weights=[
-                    float(self.config.get("win_rate", 0.7)),
-                    float(self.config.get("loss_rate", 0.25)),
-                    float(self.config.get("tie_rate", 0.05)),
-                ],
-            )[0]
-            result_shot = get_virtual_result_image(bet_side, outcome_key)
-            result_win = (
-                "T"
-                if outcome_key == "TIE"
-                else (bet_side if outcome_key == "WIN" else ("P" if bet_side == "B" else "B"))
-            )
+        if is_virtual:
+            # Giữ nguyên shot ván cũ đã chọn — không chờ capture mới, không fallback
+            pass
         else:
-            outcome_key = outcome_from_ho_and_winner(bet_side, result_win)
+            # THẬT: chỉ nhận capture mới hơn thời điểm sau hô. Không PREVIEW cũ / folder ảo.
+            settle_wait = int(self.config.get("result_listen_timeout_sec") or 60)
+            settle_deadline = time.time() + settle_wait
+            result_shot, result_win = None, None
+            while time.time() < settle_deadline:
+                path, win, mtime = get_newest_shot_after(
+                    self.session_table, after_ho_mtime, include_preview=False
+                )
+                if path:
+                    result_shot, result_win = path, win
+                    self.log(
+                        f"[KẾT QUẢ THẬT] Capture sau hô: {os.path.basename(path)} "
+                        f"winner={win} age={time.time() - mtime:.1f}s"
+                    )
+                    break
+                await asyncio.sleep(0.5)
+            if not result_shot:
+                self.log(
+                    f"[KẾT QUẢ THẬT] Hết {settle_wait}s — không có capture mới sau hô "
+                    f"(không fallback PREVIEW/folder ảo) → bỏ gửi ảnh"
+                )
+
+            if result_shot and os.path.exists(result_shot):
+                outcome_key = outcome_from_shot_filename(result_shot)
+                if not outcome_key:
+                    if result_win in ("B", "P", "T"):
+                        outcome_key = outcome_from_ho_and_winner(bet_side, result_win)
+                    else:
+                        outcome_key = "TIE"
+                self.log(
+                    f"[KẾT QUẢ THẬT] caption={outcome_key} từ "
+                    f"{'filename' if outcome_from_shot_filename(result_shot) else 'hô×winner'} "
+                    f"| file={os.path.basename(result_shot)}"
+                )
 
         send_path = result_shot
-        if self.config.get("stamp_result_on_image", True):
-            send_path = stamp_outcome_on_image(
-                result_shot, outcome_key, self.bet_amount_label
-            )
+        result_caption = None
+        if result_shot and os.path.exists(result_shot) and outcome_key:
+            use_stamp = bool(self.config.get("stamp_result_on_image", True))
+            if use_stamp:
+                send_path = stamp_outcome_on_image(
+                    result_shot, outcome_key, self.bet_amount_label
+                )
+            else:
+                result_caption = build_outcome_caption(outcome_key, self.bet_amount_label)
 
-        if send_path and os.path.exists(send_path):
             try:
                 self.log(
                     f"Gửi ảnh kết quả ({outcome_key}): {os.path.basename(send_path)} "
-                    f"(hô={bet_side} winner ảnh={result_win})"
+                    f"(hô={bet_side} winner ảnh={result_win}"
+                    f"{f' caption={result_caption}' if result_caption else ''})"
                 )
-                await self.client.send_file(entity, send_path)
-                self.audit(f"Ảnh kết quả stamped {outcome_key}")
+                await self.client.send_file(
+                    entity, send_path, caption=result_caption or None
+                )
+                self.audit(
+                    f"Ảnh kết quả {outcome_key}"
+                    + (f" + caption" if result_caption else " stamped")
+                )
             except Exception as ex:
                 self.log(f"[LỖI GỬI ẢNH KẾT QUẢ]: {ex}")
         else:
             self.log("[CẢNH BÁO] Không có ảnh kết quả để gửi")
+            if not outcome_key:
+                outcome_key = "TIE"
 
         await asyncio.sleep(step)
 
         if not self.config.get("result_via_source_messages"):
-            result_text = build_virtual_result_for_config(self.config, outcome_key)
-            await send_text(result_text, f"Tin kết quả text ({outcome_key})")
-            await asyncio.sleep(step)
+            if not result_caption:
+                result_text = build_virtual_result_for_config(self.config, outcome_key)
+                await send_text(result_text, f"Tin kết quả text ({outcome_key})")
+                await asyncio.sleep(step)
 
         if self.config.get("outcome_message_map"):
             await send_post_result_endings(self.config, forward_idx, outcome_key)

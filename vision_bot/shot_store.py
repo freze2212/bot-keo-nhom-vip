@@ -59,12 +59,12 @@ def publish_sexy_shot(
     result_winner: str | None = None,
     round_num=None,
     kind: str = "RESULT",
+    result_outcome: str | None = None,
 ) -> str | None:
     """
     Copy/đổi tên ảnh vision → public/screenshots/sexy_Cxx_...
-    kind=RESULT → _WB_/_WP_/_WT_
+    kind=RESULT → _WB_/_WP_/_WT_ + _WIN_/_LOSS_/_TIE_ (toast settlement)
     kind=PREVIEW → _PREVIEW_ (báo bàn live)
-    Sau đó giữ tối đa 2 file / bàn.
     """
     if not src_path or not os.path.exists(src_path):
         return None
@@ -85,7 +85,16 @@ def publish_sexy_shot(
         tag = f"_W{win}"
     else:
         tag = "_PREVIEW"
-    filename = f"sexy_{key}{round_str}{tag}_{ts}.png"
+    out = str(result_outcome or "").strip().upper()
+    if out in ("WIN+", "WIN"):
+        out_tag = "_WIN"
+    elif out in ("LOSE-", "LOSE", "LOSS"):
+        out_tag = "_LOSS"
+    elif out in ("WIN+TIE", "TIE", "HÒA", "HOA"):
+        out_tag = "_TIE"
+    else:
+        out_tag = ""
+    filename = f"sexy_{key}{round_str}{tag}{out_tag}_{ts}.png"
     dest = os.path.join(d, filename)
     try:
         shutil.copy2(src_path, dest)
@@ -99,6 +108,7 @@ def publish_sexy_shot(
             pass
     except OSError:
         pass
-    keep_latest_shots(key, keep=2)
+    # Giữ nhiều hơn 2: FORCE PREVIEW không được xóa mất _WB_/_WP_/_WT_
+    keep_latest_shots(key, keep=6)
     print(f"[ShotStore] Published {filename}")
     return dest

@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_HERE)
 
 
 def _sv(config: dict) -> dict:
@@ -165,8 +166,8 @@ def check_field_changed(before_crop, after_crop, config: dict, label: str) -> tu
 
 def check_login_ok(frame, before_form, config: dict) -> tuple[bool, str]:
     """
-    Đăng nhập OK: form modal mờ/đổi mạnh HOẶC header balance có nội dung
-    (không còn đứng yên form trắng).
+    Đăng nhập OK: form modal phải ĐỔI rõ sau submit VÀ modal trắng gần như biến mất.
+    Tránh pass ảo khi chỉ mở/đóng form mà vẫn còn ĐĂNG NHẬP.
     """
     sv = _sv(config)
     if frame is None:
@@ -176,11 +177,27 @@ def check_login_ok(frame, before_form, config: dict) -> tuple[bool, str]:
     bal_std = _gray_std(bal)
     form_diff = _frame_diff_ratio(before_form, form) if before_form is not None else 0.0
     form_std = _gray_std(form)
-    # Form trắng thường std thấp; sau login trang home std cao hơn hoặc form biến mất
-    need_diff = float(sv.get("login_form_change_min") or 0.06)
+    need_diff = float(sv.get("login_form_change_min") or 0.12)
     bal_min = float(sv.get("balance_std_min") or 5.0)
-    ok = form_diff >= need_diff or bal_std >= bal_min or form_std >= 25.0
-    return ok, f"form_diff={form_diff:.3f} form_std={form_std:.1f} bal_std={bal_std:.1f}"
+    form_white = 0.0
+    if form is not None and form.size:
+        g = cv2.cvtColor(form, cv2.COLOR_BGR2GRAY)
+        form_white = float(np.mean(g > 230))
+    white_max = float(sv.get("login_form_white_max") or 0.35)
+    # Modal trắng còn chiếm giữa → chưa login xong
+    if form_white >= white_max:
+        return False, (
+            f"form_diff={form_diff:.3f} form_std={form_std:.1f} "
+            f"bal_std={bal_std:.1f} form_white={form_white:.2f} (modal còn)"
+        )
+    if before_form is not None:
+        ok = form_diff >= need_diff or (form_diff >= 0.05 and bal_std >= bal_min)
+    else:
+        ok = bal_std >= bal_min and form_white < white_max
+    return ok, (
+        f"form_diff={form_diff:.3f} form_std={form_std:.1f} "
+        f"bal_std={bal_std:.1f} form_white={form_white:.2f}"
+    )
 
 
 def check_sexy_ok(before, after, config: dict) -> tuple[bool, str]:
@@ -217,13 +234,16 @@ def check_lobby_ok(frame, config: dict) -> tuple[bool, str]:
     if form is not None:
         g = cv2.cvtColor(form, cv2.COLOR_BGR2GRAY)
         form_white = float(np.mean(g > 230))
-    ok = std >= std_min and cf >= cf_min and form_white < 0.55
+    # Siết: còn modal login → fail (trước 0.55 dễ dính)
+    ok = std >= std_min and cf >= cf_min and form_white < 0.40
     return ok, f"lobby_std={std:.1f} color={cf:.1f} form_white={form_white:.2f}"
 
 
 def check_on_table(frame, config: dict) -> tuple[bool, str]:
-    """Đã vào bàn live: timer xanh / may mắn / đang mở bài."""
-    from bet_window import betting_open_score
+    """Đã vào bàn live: timer xanh / may mắn / status vàng — không tin red đơn độc (homepage false)."""
+    from bet_window import betting_open_score, _crop, _timer_roi
+    import cv2
+    import numpy as np
 
     if frame is None:
         return False, "frame=None"
@@ -231,8 +251,23 @@ def check_on_table(frame, config: dict) -> tuple[bool, str]:
     tg = float(sc.get("timer_green") or 0)
     lg = float(sc.get("luck_green") or 0)
     yel = float(sc.get("status_yellow") or 0)
-    ok = tg > 0.01 or lg > 0.01 or yel > 0.05
-    return ok, f"timer_g={tg:.3f} luck_g={lg:.3f} yel={yel:.3f}"
+
+    red = 0.0
+    t_img = _crop(frame, _timer_roi(config))
+    if t_img is not None and t_img.size:
+        hsv = cv2.cvtColor(t_img, cv2.COLOR_BGR2HSV)
+        r1 = cv2.inRange(hsv, (0, 70, 70), (12, 255, 255))
+        r2 = cv2.inRange(hsv, (165, 70, 70), (180, 255, 255))
+        red = float(max(r1.mean(), r2.mean()) / 255.0)
+
+    zone = _crop(frame, config.get("roi_zone_player") or {"x": 751, "y": 868, "width": 180, "height": 110})
+    zone_std = 0.0
+    if zone is not None and zone.size:
+        zone_std = float(np.std(cv2.cvtColor(zone, cv2.COLOR_BGR2GRAY)))
+
+    # red chỉ tính khi kèm timer/luck (tránh homepage đỏ → giả on_table)
+    ok = tg > 0.015 or lg > 0.08 or yel > 0.04 or (red > 0.04 and (tg > 0.005 or lg > 0.03))
+    return ok, f"timer_g={tg:.3f} luck_g={lg:.3f} yel={yel:.3f} red={red:.3f} zone_std={zone_std:.1f}"
 
 
 def wait_gate(
@@ -273,65 +308,60 @@ def soft_recover_to_home(
     skip_login: bool = False,
 ) -> tuple[dict | None, bool]:
     """
-    Soft recover: KHÔNG kill Chrome — focus → gõ lại URL → chờ page_open → enter Sexy.
-    skip_login=True: đã đặt+capture OK → không gõ TK/MK, chỉ Sexy → phòng → bàn.
-    Trả (win_rect, on_table_ok).
+    HARD recover: kill Chrome profile → launch lại URL → enter FULL (luôn login).
+    Không gõ omnibox / không skip login / không Soft URL.
+    skip_login bị bỏ qua (giữ param để không vỡ caller cũ).
     """
-    from chrome_launcher import navigate_chrome_to_url
-    from input_click import focus_hwnd
+    from chrome_launcher import ensure_chrome_up
     from login_flow import login_home_url, run_enter_sexy_flow
 
     url = login_home_url(config)
+    rel = config.get("chrome_profile_dir") or "chrome_user_data_vision"
+    profile = rel if os.path.isabs(rel) else os.path.join(_ROOT, rel)
+    wr = config.get("window_rect") or {}
+    ww = int(wr.get("width") or 1920)
+    wh = int(wr.get("height") or 1080)
+
     if log:
-        mode = "skip_login→Sexy" if skip_login else "full_login"
-        log.event("SOFT_RECOVER", f"{reason} → URL {url} ({mode})")
-        log.warn(
-            f"SOFT_RECOVER vì: {reason} — nhập lại URL rồi "
-            + ("Sexy→phòng (không login)" if skip_login else "login+Sexy từ đầu")
-        )
+        log.event("HARD_RECOVER", f"{reason} → kill Chrome + relaunch {url}")
+        log.warn(f"HARD_RECOVER vì: {reason} — restart Chrome toàn bộ rồi login+Sexy từ đầu")
+        if skip_login:
+            log.info("HARD_RECOVER: bỏ qua skip_login — luôn login lại sau restart")
 
-    try:
-        if hwnd is None and wc is not None:
-            hwnd = getattr(wc, "hwnd", None)
-        focus_hwnd(hwnd)
-    except Exception:
-        pass
-
-    navigate_chrome_to_url(url, wait_sec=float((_sv(config).get("url_wait_sec") or 6.0)))
-    time.sleep(1.0)
-
-    profile = None
-    try:
-        rel = config.get("chrome_profile_dir") or "chrome_user_data_vision"
-        profile = rel if os.path.isabs(rel) else os.path.join(_HERE, rel)
-    except Exception:
-        profile = None
+    ensure_chrome_up(
+        url=url,
+        profile_dir=profile,
+        chrome_exe=(config.get("chrome_exe") or None) or None,
+        force_restart=True,
+        wait_sec=float(config.get("chrome_boot_wait_sec") or 12),
+        window_w=ww,
+        window_h=wh,
+    )
 
     win_rect = None
-    if wc is not None:
-        win_rect = wc.get_rect() if hasattr(wc, "get_rect") else None
-        if hasattr(wc, "find_and_setup_window"):
-            wr = config.get("window_rect") or {}
+    if wc is not None and hasattr(wc, "find_and_setup_window"):
+        for _ in range(25):
             found = wc.find_and_setup_window(
                 target_x=int(wr.get("x", 0)),
                 target_y=int(wr.get("y", 0)),
-                target_w=int(wr.get("width", 1920)),
-                target_h=int(wr.get("height", 1080)),
+                target_w=ww,
+                target_h=wh,
                 maximize=False,
                 profile_dir=profile,
             )
             if found:
                 win_rect = found
+                break
+            time.sleep(0.8)
 
     if not win_rect:
         if log:
-            log.err("SOFT_RECOVER FAIL: không lấy được window rect")
+            log.err("HARD_RECOVER FAIL: không lấy được window rect sau restart Chrome")
         return None, False
 
     if nav is not None:
         nav.set_window_rect(win_rect)
 
-    # Chờ trang mở
     def _page(f):
         return check_page_open(f, config)
 
@@ -340,7 +370,7 @@ def soft_recover_to_home(
         win_rect,
         config,
         _page,
-        timeout_sec=float((_sv(config).get("page_timeout_sec") or 20)),
+        timeout_sec=float((_sv(config).get("page_timeout_sec") or 25)),
         log=log,
         name="page_open",
     )
@@ -356,8 +386,9 @@ def soft_recover_to_home(
         log=log,
         grabber=grabber,
         verify=True,
-        recover_on_fail=False,  # tránh đệ quy
-        skip_login=skip_login,
+        recover_on_fail=False,
+        skip_login=False,  # luôn login sau kill Chrome
+        wc=wc,
     )
     win_rect = wc.get_rect() if wc and hasattr(wc, "get_rect") else win_rect
     if nav is not None and win_rect:
@@ -366,13 +397,11 @@ def soft_recover_to_home(
     on_table, tdet = check_on_table(frame, config)
     log_step(log, "on_table_after_recover", on_table, tdet)
     save_step_shot(frame, "recover_table", config, log)
-    # Ưu tiên đã vào bàn — dù enter báo fail giữa chừng (sexy gate)
-    ok = on_table or bool(result.get("ok") if isinstance(result, dict) else result)
+    # Chỉ coi OK khi THẬT sự trên bàn — không tin enter.ok / red giả
+    ok = bool(on_table)
     if log:
         if on_table:
-            log.ok("SOFT_RECOVER_DONE — đã vào bàn")
-        elif ok:
-            log.ok("SOFT_RECOVER_DONE — enter ok (chưa timer)")
+            log.ok("HARD_RECOVER_DONE — đã vào bàn")
         else:
-            log.err("SOFT_RECOVER_DONE nhưng chưa chắc trên bàn")
+            log.err("HARD_RECOVER_DONE nhưng chưa chắc trên bàn")
     return win_rect, ok

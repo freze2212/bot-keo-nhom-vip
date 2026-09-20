@@ -642,7 +642,13 @@ def get_taskbar_height(fallback: int = 48) -> int:
     return fallback
 
 
-def crop_capture_frame(frame, top_skip_frac: float = 0.25, taskbar_px: int | None = None):
+def crop_capture_frame(
+    frame,
+    top_skip_frac: float = 0.25,
+    taskbar_px: int | None = None,
+    side_skip_frac: float = 0.10,
+):
+    """Cắt bỏ top + taskbar + ~10% mỗi bên trái/phải (mảng đen)."""
     if frame is None or getattr(frame, "size", 0) == 0:
         return None, {"ok": False}
     h, w = frame.shape[:2]
@@ -650,12 +656,18 @@ def crop_capture_frame(frame, top_skip_frac: float = 0.25, taskbar_px: int | Non
     tb = max(0, min(tb, h // 5))
     y0 = int(h * float(top_skip_frac))
     y1 = max(y0 + 1, h - tb)
-    crop = frame[y0:y1, 0:w]
+    side = max(0.0, min(0.25, float(side_skip_frac or 0)))
+    x0 = int(w * side)
+    x1 = max(x0 + 1, w - x0)
+    crop = frame[y0:y1, x0:x1]
     return crop, {
         "ok": True,
         "y0": y0,
         "y1": y1,
+        "x0": x0,
+        "x1": x1,
         "taskbar_px": tb,
+        "side_skip_frac": side,
         "src_h": h,
         "src_w": w,
         "out_h": int(crop.shape[0]),
@@ -668,8 +680,9 @@ def save_settlement_capture(
     path: str,
     top_skip_frac: float = 0.25,
     taskbar_px: int | None = None,
+    side_skip_frac: float = 0.10,
 ) -> tuple[bool, dict]:
-    cropped, meta = crop_capture_frame(frame, top_skip_frac, taskbar_px)
+    cropped, meta = crop_capture_frame(frame, top_skip_frac, taskbar_px, side_skip_frac)
     if cropped is None:
         return False, meta
     gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)

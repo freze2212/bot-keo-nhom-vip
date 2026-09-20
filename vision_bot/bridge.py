@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from typing import Callable, Optional
 
 import requests
@@ -119,3 +120,40 @@ class VisionBridge:
             )
         except Exception:
             pass
+
+    def notify_vision_bet(
+        self,
+        table_name: str,
+        bet_side: str,
+        round_num=None,
+    ) -> bool:
+        """Công bố cửa vision vừa đặt — forward hô cùng nguồn này."""
+        side = str(bet_side or "").strip().upper()
+        if side.startswith("B") or side in ("CAI", "CÁI"):
+            side = "B"
+        elif side.startswith("P") or side == "CON":
+            side = "P"
+        else:
+            print(f"[Bridge] Bỏ notify-vision-bet — side không hợp lệ: {bet_side}")
+            return False
+        payload = {
+            "tableName": table_name,
+            "betSide": side,
+            "side": side,
+            "nameService": self.name_service,
+            "roundCount": round_num,
+            "hoAt": int(time.time() * 1000),
+            "source": "vision",
+        }
+        try:
+            r = requests.post(
+                f"{self.server_url}/api/notify-main-ho",
+                json=payload,
+                timeout=5,
+            )
+            ok = r.status_code < 300
+            print(f"[Bridge] notify-vision-bet {side} → {r.status_code}")
+            return ok
+        except Exception as e:
+            print(f"[Bridge] notify-vision-bet lỗi: {e}")
+            return False

@@ -78,36 +78,46 @@ class GameStateMachine:
         self.last_result = None
         self.is_result_sent = False
         self.round_counter = 0
+        self._timer_was_open = False
 
     def update_state(self, timer_color_status, result_detected):
         """
-        timer_color_status: 'TIE_OR_TIMER' (khi đồng hồ xanh đang chạy), 'EMPTY_OR_UNKNOWN' (khi hết giờ)
+        timer_color_status: 'TIE_OR_TIMER' (cửa mở), 'EMPTY_OR_UNKNOWN'
         result_detected: 'BANKER', 'PLAYER', 'TIE_OR_TIMER' hoặc 'EMPTY_OR_UNKNOWN'
         """
         event = None
+        timer_open = timer_color_status == "TIE_OR_TIMER"
+        rising = timer_open and not self._timer_was_open
+        falling = (not timer_open) and self._timer_was_open
+        self._timer_was_open = timer_open
 
-        # 1. Phát hiện bắt đầu mở cược ván mới
-        if timer_color_status == "TIE_OR_TIMER":
-            if self.current_state != self.STATE_BETTING:
-                self.current_state = self.STATE_BETTING
-                self.is_result_sent = False # Mở khóa cho ván mới
-                self.round_counter += 1
-                event = ("NEW_ROUND_START", self.round_counter)
-
-        # 2. Hết thời gian cược -> Dealer đang chia / mở bài
-        elif self.current_state == self.STATE_BETTING and timer_color_status != "TIE_OR_TIMER":
+        # Cửa mở LẠI (cạnh lên) → ván mới.
+        # Cho phép từ WAITING / RESULT / DEALING (settlement thường không có banner
+        # → không vào RESULT → nếu chỉ cho WAITING/RESULT thì đứng im sau 1 tay).
+        if rising and self.current_state != self.STATE_BETTING:
+            self.current_state = self.STATE_BETTING
+            self.is_result_sent = False
+            self.round_counter += 1
+            event = ("NEW_ROUND_START", self.round_counter)
+        elif falling and self.current_state == self.STATE_BETTING:
             self.current_state = self.STATE_DEALING
             event = ("DEALING_STARTED", None)
+        elif (not timer_open) and self.current_state == self.STATE_RESULT:
+            self.current_state = self.STATE_WAITING
 
-        # 3. Phát hiện có kết quả (và chưa được gửi)
-        if result_detected in ["BANKER", "PLAYER", "TIE_OR_TIMER"] and result_detected != "EMPTY_OR_UNKNOWN":
-            if not self.is_result_sent and self.current_state in [self.STATE_DEALING, self.STATE_BETTING]:
-                self.current_state = self.STATE_RESULT
-                self.last_result = "TIE" if result_detected == "TIE_OR_TIMER" else result_detected
-                self.is_result_sent = True # KHÓA CHỐNG TRÙNG NGAY LẬP TỨC
-                event = ("RESULT_FOUND", {
-                    "round": self.round_counter,
-                    "winner": self.last_result
-                })
+        # Banner kết quả: chỉ khi đang DEALING (đã hết giờ cược)
+        if (
+            result_detected in ["BANKER", "PLAYER", "TIE_OR_TIMER"]
+            and result_detected != "EMPTY_OR_UNKNOWN"
+            and not self.is_result_sent
+            and self.current_state == self.STATE_DEALING
+        ):
+            self.current_state = self.STATE_RESULT
+            self.last_result = "TIE" if result_detected == "TIE_OR_TIMER" else result_detected
+            self.is_result_sent = True
+            event = ("RESULT_FOUND", {
+                "round": self.round_counter,
+                "winner": self.last_result,
+            })
 
         return self.current_state, event
