@@ -85,11 +85,21 @@ def winner_from_shot_filename(filepath):
     if not filepath:
         return None
     bname = os.path.basename(filepath).upper()
-    if "_WB_" in bname or "_WB." in bname or "WINCAI" in bname:
+    # Slot mới: ..._CURRENT_WB_WIN.png / ..._LAST_WIN_WB_WIN.png
+    if "_WB_" in bname or "_WB." in bname or bname.endswith("_WB.PNG") or "WINCAI" in bname:
         return "B"
-    if "_WP_" in bname or "_WP." in bname or "WINCON" in bname:
+    if "_WP_" in bname or "_WP." in bname or bname.endswith("_WP.PNG") or "WINCON" in bname:
         return "P"
-    if "_WT_" in bname or "_WT." in bname or "TIE" in bname:
+    if "_WT_" in bname or "_WT." in bname or bname.endswith("_WT.PNG"):
+        return "T"
+    # CURRENT_WB_WIN / LAST_WIN_WB / LAST_LOSS_WB
+    if "_WB_WIN" in bname or "_LAST_WIN_WB" in bname or "CURRENT_WB" in bname or "LAST_LOSS_WB" in bname:
+        return "B"
+    if "_WP_WIN" in bname or "_LAST_WIN_WP" in bname or "CURRENT_WP" in bname or "LAST_LOSS_WP" in bname:
+        return "P"
+    if "_WT_WIN" in bname or "_LAST_WIN_WT" in bname or "CURRENT_WT" in bname or "LAST_TIE" in bname:
+        return "T"
+    if "TIE" in bname and "WIN+TIE" in bname:
         return "T"
     return None
 
@@ -100,11 +110,13 @@ def outcome_from_shot_filename(filepath):
         return None
     bname = os.path.basename(filepath).upper()
     # Ưu tiên tag outcome tường minh (tránh nhầm _WB_ với WIN)
-    if "_LOSS_" in bname or "_LOSE-" in bname or "_LOSE_" in bname:
+    if "_LOSS_" in bname or "_LOSE-" in bname or "_LOSE_" in bname or bname.endswith("_LOSS.PNG") or "LAST_LOSS" in bname:
         return "LOSS"
-    if "_TIE_" in bname or "WIN+TIE" in bname:
+    if "_TIE_" in bname or "WIN+TIE" in bname or bname.endswith("_TIE.PNG") or "LAST_TIE" in bname:
         return "TIE"
-    if "_WIN_" in bname or "_WIN+_" in bname:
+    if "LAST_WIN" in bname:
+        return "WIN"
+    if "_WIN_" in bname or "_WIN+_" in bname or bname.endswith("_WIN.PNG"):
         return "WIN"
     return None
 
@@ -380,8 +392,8 @@ def request_live_capture(table_name, result_winner=None, name_service=None):
         return None
 
 
-def get_newest_shot_any(table_name, newer_than_mtime=None):
-    """File sexy_* mới nhất của bàn (kể cả PREVIEW)."""
+def get_newest_shot_any(table_name, newer_than_mtime=None, prefer_preview=False):
+    """File sexy_* mới nhất của bàn (kể cả PREVIEW). Lọc ảnh giả/Cursor."""
     search_dirs = [
         os.path.join(ROOT_DIR, "public", "screenshots"),
         os.path.join(ROOT_DIR, "screenshots"),
@@ -389,6 +401,8 @@ def get_newest_shot_any(table_name, newer_than_mtime=None):
     tbl = str(table_name or "").upper()
     best = None
     best_m = -1
+    best_preview = None
+    best_preview_m = -1
     for sdir in search_dirs:
         if not os.path.isdir(sdir):
             continue
@@ -399,19 +413,29 @@ def get_newest_shot_any(table_name, newer_than_mtime=None):
                     continue
                 if tbl.lower() not in low:
                     continue
+                # Báo bàn / live: không lấy LAST_* (slot ảo tái sử dụng)
+                if "last_" in low:
+                    continue
                 path = os.path.join(sdir, name)
+                if not is_real_screenshot_file(path):
+                    continue
                 try:
                     m = os.path.getmtime(path)
                 except OSError:
                     continue
                 if newer_than_mtime is not None and m <= newer_than_mtime:
                     continue
+                if "preview" in low and m > best_preview_m:
+                    best_preview_m = m
+                    best_preview = path
                 if m > best_m:
                     best_m = m
                     best = path
         except OSError:
             pass
-    return best
+    if prefer_preview and best_preview:
+        return best_preview
+    return best_preview or best
 
 
 def list_main_shots_for_table(table_name, winners=('B', 'P', 'T'), include_preview=False):
@@ -458,14 +482,27 @@ def list_main_shots_for_table(table_name, winners=('B', 'P', 'T'), include_previ
     return out
 
 
-def get_newest_shot_after(table_name, after_mtime, include_preview=True):
-    """Ảnh sexy_* mới nhất có mtime > after_mtime (sau hô). Không lấy file cũ hơn."""
+def get_newest_shot_after(table_name, after_mtime, include_preview=True, current_only=False):
+    """Ảnh sexy_* mới nhất mtime > after_mtime (sau hô).
+
+    THẬT: current_only=True → chỉ CURRENT_* (không lấy LAST_* đè cùng lúc settle).
+    """
     shots = list_main_shots_for_table(
         table_name, winners=None, include_preview=include_preview
     )
     for mtime, path, win in shots:
-        if mtime > after_mtime and path and os.path.exists(path):
-            return path, win, mtime
+        if mtime <= after_mtime or not path or not os.path.exists(path):
+            continue
+        base = os.path.basename(path).upper()
+        if "LAST_" in base:
+            continue  # slot ảo — không phải capture vòng này
+        if current_only and "CURRENT" not in base:
+            continue
+        if not include_preview and "PREVIEW" in base:
+            continue
+        if not is_real_screenshot_file(path):
+            continue
+        return path, win, mtime
     return None, None, None
 
 
@@ -512,6 +549,121 @@ def pick_old_main_shot(table_name, max_age_s=None):
     return None, None
 
 
+def pick_last_outcome_shot(table_name, outcome):
+    """
+    Ảo hướng D: lấy đúng slot LAST_WIN / LAST_LOSS / LAST_TIE.
+    Trả (path, table_winner B/P/T).
+    """
+    search_dirs = [
+        os.path.join(ROOT_DIR, "public", "screenshots"),
+        os.path.join(ROOT_DIR, "screenshots"),
+    ]
+    tbl = str(table_name or "").upper()
+    key = tbl if tbl.startswith("C") else f"C{''.join(c for c in tbl if c.isdigit()).zfill(2)}"
+    out = str(outcome or "").upper()
+    if out == "WIN":
+        needle = "last_win"
+        need_tag = "_win"
+        ban_tag = "_loss"
+    elif out == "LOSS":
+        needle = "last_loss"
+        need_tag = "_loss"
+        ban_tag = None
+    elif out == "TIE":
+        needle = "last_tie"
+        need_tag = "_tie"
+        ban_tag = None
+    else:
+        return None, None
+
+    slot_hits = []
+    legacy_hits = []
+    for sdir in search_dirs:
+        if not os.path.isdir(sdir):
+            continue
+        try:
+            for name in os.listdir(sdir):
+                low = name.lower()
+                if not low.startswith("sexy_") or not low.endswith(IMAGE_EXTENSIONS):
+                    continue
+                if key.lower() not in low:
+                    continue
+                if "preview" in low or "current" in low:
+                    continue
+                path = os.path.join(sdir, name)
+                if not is_real_screenshot_file(path):
+                    continue
+                try:
+                    m = os.path.getmtime(path)
+                except OSError:
+                    continue
+                if needle in low and need_tag in low and (not ban_tag or ban_tag not in low):
+                    win = resolve_shot_winner(path) or winner_from_shot_filename(path)
+                    slot_hits.append((m, path, win))
+                elif needle not in low and need_tag in low and (not ban_tag or ban_tag not in low):
+                    # legacy sexy_*_WIN_ / _LOSS_ / _TIE_
+                    if "last_" in low:
+                        continue
+                    win = resolve_shot_winner(path) or winner_from_shot_filename(path)
+                    legacy_hits.append((m, path, win))
+        except OSError:
+            pass
+    pool = slot_hits or legacy_hits
+    if not pool:
+        return None, None
+    pool.sort(key=lambda x: x[0], reverse=True)
+    path, win = pool[0][1], pool[0][2]
+    if out == "TIE":
+        win = win or "T"
+    elif win not in ("B", "P"):
+        up = os.path.basename(path).upper()
+        if "_WB" in up or "CURRENT_WB" in up or "LOSS_WB" in up or "WIN_WB" in up:
+            win = "B"
+        elif "_WP" in up or "CURRENT_WP" in up:
+            win = "P"
+    return path, win
+
+
+def pick_last_win_shot(table_name):
+    """Tương thích cũ → LAST_WIN."""
+    return pick_last_outcome_shot(table_name, "WIN")
+
+
+def pick_virtual_slot_for_rates(table_name, win_rate=0.8, loss_rate=0.15, tie_rate=0.05):
+    """
+    Ảo hướng D: random WIN/LOSS/TIE theo tỉ lệ → lấy đúng LAST_* slot.
+    Thiếu slot thì thử outcome còn lại (ưu tiên WIN).
+    Trả (path, table_winner, outcome, bet_side).
+    """
+    order = random.choices(
+        ["WIN", "LOSS", "TIE"],
+        weights=[float(win_rate), float(loss_rate), float(tie_rate)],
+    )
+    preferred = order[0]
+    # Thử preferred rồi fallback các outcome còn lại
+    try_list = [preferred] + [x for x in ("WIN", "LOSS", "TIE") if x != preferred]
+    for outcome in try_list:
+        path, table_win = pick_last_outcome_shot(table_name, outcome)
+        if not path or not os.path.exists(path):
+            continue
+        if outcome == "WIN":
+            if table_win not in ("B", "P"):
+                continue
+            bet_side = table_win
+        elif outcome == "LOSS":
+            if table_win not in ("B", "P"):
+                continue
+            bet_side = "P" if table_win == "B" else "B"  # hô ngược cửa thắng → THUA
+        else:  # TIE
+            bet_side = random.choice(["B", "P"])
+            table_win = table_win or "T"
+        if outcome != preferred:
+            # vẫn OK — log caller sẽ thấy fallback
+            pass
+        return path, table_win, outcome, bet_side
+    return None, None, None, None
+
+
 HELD_SHOT_DIR = os.path.join(SCREENSHOT_DIR, 'held')
 
 
@@ -525,7 +677,9 @@ def hold_main_shot_copy(src, tag=""):
         safe_tag = re.sub(r'[^A-Za-z0-9_-]+', '_', str(tag or 'x'))[:40]
         dest = os.path.join(HELD_SHOT_DIR, f"{safe_tag}_{base}")
         shutil.copy2(src, dest)
-        if os.path.exists(dest) and os.path.getsize(dest) >= 40000:
+        if os.path.exists(dest) and os.path.getsize(dest) >= (
+            350000 if os.path.basename(dest).lower().startswith("sexy_") else 40000
+        ):
             return dest
     except OSError:
         pass
@@ -842,6 +996,32 @@ def resolve_screenshot_path(filepath):
             return c
     return None
 
+def _looks_like_sexy_table(filepath):
+    """Phân biệt bàn Sexy (felt xanh) vs Cursor/IDE (UI tối xám)."""
+    try:
+        from PIL import Image
+        img = Image.open(filepath).convert("RGB")
+        w, h = img.size
+        if w < 400 or h < 300:
+            return False
+        # Vùng bàn giữa-trên: felt xanh sống động
+        box = (int(w * 0.18), int(h * 0.12), int(w * 0.82), int(h * 0.52))
+        crop = img.crop(box).resize((64, 40))
+        pix = list(crop.getdata())
+        n = max(len(pix), 1)
+        green = sum(1 for r, g, b in pix if g > 70 and g >= r + 15 and g >= b + 8)
+        # IDE tối: ít màu bão hòa, trung bình tối
+        dark = sum(1 for r, g, b in pix if (r + g + b) / 3 < 55)
+        sat = sum(1 for r, g, b in pix if max(r, g, b) - min(r, g, b) > 35)
+        if green / n >= 0.06:
+            return True
+        if dark / n > 0.55 and sat / n < 0.12:
+            return False
+        return sat / n >= 0.18
+    except Exception:
+        return True  # size đã pass — không block nếu thiếu PIL
+
+
 def is_real_screenshot_file(filepath):
     if not filepath:
         return False
@@ -853,11 +1033,23 @@ def is_real_screenshot_file(filepath):
     if "/images/" in norm and "/screenshots/" not in norm:
         return False
     try:
-        if os.path.getsize(resolved) < 40000:
+        sz = os.path.getsize(resolved)
+        # Game Sexy crop thường >400KB; Cursor IDE / ảnh test hay <300KB
+        min_sz = 350000 if name.startswith("sexy_") else 40000
+        if sz < min_sz:
             return False
     except OSError:
         return False
-    return ("/screenshots/" in norm) or name.startswith("sexy_") or name.startswith("real_") or name.startswith("ho_")
+    if not (
+        ("/screenshots/" in norm)
+        or name.startswith("sexy_")
+        or name.startswith("real_")
+        or name.startswith("ho_")
+    ):
+        return False
+    if name.startswith("sexy_") and not _looks_like_sexy_table(resolved):
+        return False
+    return True
 
 def extract_winner_from_filename(filepath):
     if not filepath:
@@ -1960,7 +2152,7 @@ class TelegramForwardBot:
             return self.dialog_cache.get(target_str)
 
     def dedicated_preview_group_id(self):
-        """Nhóm báo bàn riêng — không trùng nhóm hô/kết quả."""
+        """Nhóm báo bàn riêng — khác nhóm hô/kết quả."""
         raw = self.config.get('table_preview_group_id')
         if not raw:
             return None
@@ -1970,12 +2162,24 @@ class TelegramForwardBot:
             return None
         return preview
 
+    def should_send_table_preview(self):
+        """Báo bàn chỉ cho nhóm kéo THẬT theo ca — không áp dụng nhóm ảo."""
+        if self.config.get("is_virtual"):
+            return False
+        return bool(self.config.get("send_table_preview", False))
+
     def preview_group_id(self):
-        """Nhóm nhận ảnh báo bàn. Báo bàn trước hô thì được gửi vào đúng nhóm round."""
-        if self.config.get('table_preview_before_ho') or self.config.get('flow_prior_round'):
-            raw = self.config.get('table_preview_group_id') or self.group_id
-            return str(raw).strip() if raw else None
-        return self.dedicated_preview_group_id()
+        """
+        Nhóm nhận ảnh báo bàn (chỉ khi should_send_table_preview).
+        Có table_preview_group_id riêng → gửi nhóm đó; không thì gửi nhóm round.
+        """
+        if not self.should_send_table_preview():
+            return None
+        dedicated = self.dedicated_preview_group_id()
+        if dedicated:
+            return dedicated
+        # Không có nhóm riêng: gửi vào đúng nhóm ca (thật)
+        return str(self.group_id).strip() if self.group_id else None
 
     async def _forward_order(self, forward_idx, order, delays, label_prefix, default_delay=20):
         order = order or []
@@ -1987,7 +2191,13 @@ class TelegramForwardBot:
 
     async def _send_preview_shot(self, entity, preview_shot, caption):
         if not preview_shot or not os.path.exists(preview_shot):
-            self.log("[SKIP ẢNH BÁO BÀN] Không có ảnh round cũ")
+            self.log("[SKIP ẢNH BÁO BÀN] Không có ảnh PREVIEW/CURRENT")
+            return False
+        if not is_real_screenshot_file(preview_shot):
+            self.log(
+                f"[SKIP ẢNH BÁO BÀN] File không phải bàn game: "
+                f"{os.path.basename(preview_shot)}"
+            )
             return False
         try:
             self.log(f"Gửi ảnh báo bàn: {os.path.basename(preview_shot)}")
@@ -2005,9 +2215,9 @@ class TelegramForwardBot:
 
     async def _execute_prior_round_flow(self, messages_to_send, entity, forward_idx, send_text):
         """
-        Luồng: tin1 tin2 → ảnh báo bàn → tin3 → hô → ảnh kết quả (caption, không stamp).
-        THẬT: hô match_vision → chỉ gửi sexy_* có mtime > sau hô (không fallback).
-        ẢO: lấy shot ván cũ đã biết B/P → hô theo win/loss/tie rate → gửi đúng shot đó.
+        Luồng: tin1 tin2 → (thật: báo bàn) → tin3 → hô → ảnh kết quả (caption).
+        THẬT: hô match_vision → CURRENT sau hô.
+        ẢO: random WIN/LOSS/TIE → LAST_* slot khớp → hô khớp → gửi ảnh đó.
         """
         step = config_step_delay(self.config, 20)
         is_virtual = bool(self.config.get("is_virtual"))
@@ -2024,49 +2234,64 @@ class TelegramForwardBot:
             step,
         )
 
-        # Báo bàn: nhờ vision chụp LIVE đúng lúc này
-        before_m = time.time() - 0.5
-        self.log(f"[BÁO BÀN] Request capture live bàn {self.session_table}...")
-        request_live_capture(self.session_table, name_service=self.name_service)
         preview_shot = None
-        for _ in range(20):
-            await asyncio.sleep(0.4)
-            cand = get_newest_shot_any(self.session_table, newer_than_mtime=before_m)
-            if cand and os.path.exists(cand):
-                preview_shot = cand
-                break
-        if not preview_shot:
-            shots = list_main_shots_for_table(self.session_table)
-            preview_shot = shots[0][1] if shots else None
-            self.log("[BÁO BÀN] Không có capture live — fallback shot disk")
-
         shots = list_main_shots_for_table(self.session_table)
         old_shot = shots[1][1] if len(shots) >= 2 else (shots[0][1] if shots else None)
         new_shot = shots[0][1] if shots else None
         old_win = shots[1][2] if len(shots) >= 2 else (shots[0][2] if shots else None)
         new_win = shots[0][2] if shots else None
 
-        # Ảo: bắt buộc dùng shot ván ĐÃ XONG (ưu tiên mới nhì, cửa B/P để hô WIN/LOSS)
+        # Ảo: chọn slot theo rates lúc hô (không chọn sớm ở đây)
         if is_virtual:
-            picked, picked_win = pick_old_main_shot(self.session_table)
-            if picked:
-                old_shot, old_win = picked, picked_win
-                self.log(
-                    f"[ẢO] Chọn shot ván cũ để hô: {os.path.basename(old_shot)} "
-                    f"winner={old_win}"
-                )
-            elif not old_shot:
-                self.log("[ẢO] Chưa có sexy_* WB/WP/WT trên disk — không hô được")
+            self.log("[ẢO] Chờ bước hô — random WIN/LOSS/TIE + lấy LAST_* tương ứng")
 
-        if self.config.get("send_table_preview", True):
+        # Báo bàn: CHỈ nhóm THẬT theo ca; có table_preview_group_id → gửi nhóm riêng
+        if self.should_send_table_preview():
+            before_m = time.time() - 0.5
+            self.log(f"[BÁO BÀN] Request capture live bàn {self.session_table}...")
+            request_live_capture(self.session_table, name_service=self.name_service)
+            for _ in range(20):
+                await asyncio.sleep(0.4)
+                cand = get_newest_shot_any(
+                    self.session_table, newer_than_mtime=before_m, prefer_preview=True
+                )
+                if cand and os.path.exists(cand) and is_real_screenshot_file(cand):
+                    preview_shot = cand
+                    break
+            if not preview_shot:
+                # Chỉ PREVIEW/CURRENT — không fallback LAST_* (slot ảo / ảnh Cursor cũ)
+                cand = get_newest_shot_any(self.session_table, prefer_preview=True)
+                if cand and is_real_screenshot_file(cand):
+                    preview_shot = cand
+                    self.log("[BÁO BÀN] Không có capture live — fallback PREVIEW/CURRENT disk")
+                else:
+                    self.log("[BÁO BÀN] Không có PREVIEW/CURRENT hợp lệ trên disk")
+
             cap = str(
                 self.config.get(
                     "send_table_preview_caption",
                     "🎰 SẢNH SEXY BÀN : {table} 💎",
                 )
             ).replace("{table}", self.session_table)
-            await self._send_preview_shot(entity, preview_shot or old_shot or new_shot, cap)
+            target_gid = self.preview_group_id()
+            target_entity = entity
+            if target_gid and str(target_gid).strip() != str(self.group_id or "").strip():
+                resolved = await self.resolve_entity(target_gid)
+                if resolved:
+                    target_entity = resolved
+                    self.log(f"[BÁO BÀN] Gửi sang nhóm riêng {target_gid}")
+                else:
+                    self.log(
+                        f"[BÁO BÀN] Không resolve nhóm riêng {target_gid} — gửi nhóm ca"
+                    )
+            else:
+                self.log(f"[BÁO BÀN] Gửi vào nhóm ca {self.group_id}")
+            await self._send_preview_shot(
+                target_entity, preview_shot, cap
+            )
             await asyncio.sleep(step)
+        elif is_virtual:
+            self.log("[BÁO BÀN] Bỏ qua — nhóm ảo không báo bàn")
 
         await self._forward_order(
             forward_idx,
@@ -2077,9 +2302,8 @@ class TelegramForwardBot:
         )
 
         # --- HÔ + ẢNH KẾT QUẢ ---
-        # THẬT: hô theo vision → chỉ gửi capture mtime > sau hô (không fallback).
-        # ẢO: dùng shot ván cũ (đã biết B/P/T) → hô để đạt ~80% WIN / 15% LOSS / 5% TIE
-        #      → gửi đúng shot ván đó (không chờ capture mới, không folder images/*).
+        # THẬT: hô theo vision → chỉ gửi capture mtime > sau hô (CURRENT).
+        # ẢO hướng D: random 80/15/5 → LAST_WIN / LAST_LOSS / LAST_TIE → hô khớp → gửi ảnh đó.
         ho_mode = str(
             self.config.get("ho_mode")
             or ("match_shot" if is_virtual else "random")
@@ -2090,19 +2314,23 @@ class TelegramForwardBot:
         result_win = None
 
         if is_virtual:
-            if not old_shot or not os.path.exists(old_shot):
-                self.log("[ẢO] Không có shot ván cũ — bỏ ca hô/kết quả")
-                return
-            result_shot, result_win = old_shot, old_win
-            outcome_key, bet_side = pick_virtual_outcome_and_side(
-                old_win,
+            path, table_win, outcome_key, bet_side = pick_virtual_slot_for_rates(
+                self.session_table,
                 win_rate=float(self.config.get("win_rate", 0.8)),
                 loss_rate=float(self.config.get("loss_rate", 0.15)),
                 tie_rate=float(self.config.get("tie_rate", 0.05)),
             )
+            if not path or not bet_side or not outcome_key:
+                self.log(
+                    "[ẢO] Chưa đủ slot LAST_WIN/LOSS/TIE trên disk — "
+                    "chờ vision settle đủ các loại"
+                )
+                return
+            result_shot, result_win = path, table_win
+            old_shot, old_win = path, table_win
             self.log(
-                f"[ẢO] Shot ván cũ {os.path.basename(old_shot)} winner={old_win} "
-                f"→ outcome={outcome_key} hô={bet_side} "
+                f"[ẢO] {outcome_key} ← {os.path.basename(path)} "
+                f"table_win={table_win} hô={bet_side} "
                 f"(rates {self.config.get('win_rate', 0.8)}/"
                 f"{self.config.get('loss_rate', 0.15)}/"
                 f"{self.config.get('tie_rate', 0.05)})"
@@ -2154,7 +2382,10 @@ class TelegramForwardBot:
             result_shot, result_win = None, None
             while time.time() < settle_deadline:
                 path, win, mtime = get_newest_shot_after(
-                    self.session_table, after_ho_mtime, include_preview=False
+                    self.session_table,
+                    after_ho_mtime,
+                    include_preview=False,
+                    current_only=True,
                 )
                 if path:
                     result_shot, result_win = path, win
@@ -2171,16 +2402,46 @@ class TelegramForwardBot:
                 )
 
             if result_shot and os.path.exists(result_shot):
-                outcome_key = outcome_from_shot_filename(result_shot)
+                # THẬT: caption theo toast trên ảnh (+ hô), KHÔNG tin filename
+                # (vision từng gắn CURRENT_*_LOSS nhầm dù ảnh WIN+).
+                outcome_key = None
+                caption_src = "none"
+                try:
+                    _vb = os.path.join(ROOT_DIR, "vision_bot")
+                    if _vb not in sys.path:
+                        sys.path.insert(0, _vb)
+                    from settlement import classify_saved_capture  # noqa: E402
+                    from config_manager import load_config as _load_vcfg  # noqa: E402
+
+                    cls = classify_saved_capture(result_shot, _load_vcfg())
+                    kind = str((cls or {}).get("kind") or "").lower()
+                    if cls.get("ok") and kind in ("win", "lose", "tie"):
+                        outcome_key = {
+                            "win": "WIN",
+                            "lose": "LOSS",
+                            "tie": "TIE",
+                        }[kind]
+                        caption_src = f"toast:{cls.get('detail')}"
+                        # Sửa winner cho log: toast WIN → cửa hô; LOSE → cửa ngược
+                        if kind == "win" and bet_side in ("B", "P"):
+                            result_win = bet_side
+                        elif kind == "lose" and bet_side in ("B", "P"):
+                            result_win = "P" if bet_side == "B" else "B"
+                        elif kind == "tie":
+                            result_win = "T"
+                except Exception as ex:
+                    self.log(f"[KẾT QUẢ THẬT] reclassify lỗi: {ex}")
                 if not outcome_key:
+                    # Fallback: hô × winner file (không tin tag _LOSS/_WIN trên tên)
                     if result_win in ("B", "P", "T"):
                         outcome_key = outcome_from_ho_and_winner(bet_side, result_win)
+                        caption_src = "hô×winner"
                     else:
                         outcome_key = "TIE"
+                        caption_src = "default-tie"
                 self.log(
-                    f"[KẾT QUẢ THẬT] caption={outcome_key} từ "
-                    f"{'filename' if outcome_from_shot_filename(result_shot) else 'hô×winner'} "
-                    f"| file={os.path.basename(result_shot)}"
+                    f"[KẾT QUẢ THẬT] caption={outcome_key} từ {caption_src} "
+                    f"| file={os.path.basename(result_shot)} hô={bet_side} win={result_win}"
                 )
 
         send_path = result_shot
@@ -2333,43 +2594,55 @@ class TelegramForwardBot:
                 )
 
                 if self.config.get('send_custom_table_text'):
-                    custom_table_text = str(self.config['send_custom_table_text']).replace(
-                        '{table}', self.session_table
-                    )
-                    await send_text(custom_table_text, f"Đã gửi tin báo bàn {self.session_table}")
-                    await asyncio.sleep(20)
+                    if self.config.get('is_virtual'):
+                        self.log("[BÁO BÀN] Bỏ tin custom — nhóm ảo")
+                    else:
+                        custom_table_text = str(self.config['send_custom_table_text']).replace(
+                            '{table}', self.session_table
+                        )
+                        await send_text(custom_table_text, f"Đã gửi tin báo bàn {self.session_table}")
+                        await asyncio.sleep(20)
 
-                if self.config.get('send_table_preview'):
+                if self.should_send_table_preview():
                     target_preview_group = self.preview_group_id()
                     if not target_preview_group:
-                        self.log(
-                            "[SKIP ẢNH BÁO BÀN] Không có nhóm báo bàn riêng — "
-                            "không gửi ảnh bàn vào nhóm hô (tránh 2 ảnh kết quả)"
-                        )
+                        self.log("[SKIP ẢNH BÁO BÀN] Không có group_id nhận báo bàn")
                     else:
-                        shots = list_main_shots_for_table(self.session_table)
-                        newest_name = os.path.basename(shots[0][1]) if shots else '-'
-                        if len(shots) < 2:
-                            self.log(
-                                f"[SKIP ẢNH BÁO BÀN] Chưa có round cũ — "
-                                f"ảnh hiện có là round mới {newest_name}"
+                        # Ưu tiên PREVIEW live; fallback CURRENT
+                        before_m = time.time() - 0.5
+                        request_live_capture(self.session_table, name_service=self.name_service)
+                        preview_shot = None
+                        for _ in range(15):
+                            await asyncio.sleep(0.4)
+                            cand = get_newest_shot_any(
+                                self.session_table, newer_than_mtime=before_m
                             )
-                            preview_shot = None
-                        else:
-                            preview_shot = shots[1][1]
+                            if cand and os.path.exists(cand):
+                                preview_shot = cand
+                                break
+                        if not preview_shot:
+                            shots = list_main_shots_for_table(self.session_table)
+                            preview_shot = shots[0][1] if shots else None
                         caption_template = self.config.get(
                             'send_table_preview_caption',
                             '🎰 SẢNH SEXY BÀN : {table} 💎',
                         )
-                        preview_caption = str(caption_template).replace('{table}', self.session_table)
+                        preview_caption = str(caption_template).replace(
+                            '{table}', self.session_table
+                        )
                         target_preview_entity = await self.resolve_entity(target_preview_group)
+                        dedicated = self.dedicated_preview_group_id()
+                        where = (
+                            f"nhóm báo bàn riêng {target_preview_group}"
+                            if dedicated
+                            else f"nhóm ca {target_preview_group}"
+                        )
 
                         if preview_shot and os.path.exists(preview_shot) and target_preview_entity:
                             try:
                                 self.log(
-                                    f"Đang gửi ảnh báo bàn ROUND CŨ sang nhóm {target_preview_group}: "
-                                    f"{os.path.basename(preview_shot)} "
-                                    f"(không gửi round mới {newest_name})"
+                                    f"Đang gửi ảnh báo bàn → {where}: "
+                                    f"{os.path.basename(preview_shot)}"
                                 )
                                 await self.client.send_file(
                                     target_preview_entity,
@@ -2377,19 +2650,23 @@ class TelegramForwardBot:
                                     caption=preview_caption,
                                 )
                                 self.log(
-                                    f"✅ Đã báo bàn {self.session_table} ({picked_ns}) "
-                                    f"sang nhóm {target_preview_group}"
+                                    f"✅ Đã báo bàn {self.session_table} ({picked_ns}) → {where}"
                                 )
                             except Exception as ex:
                                 self.log(f"[LỖI GỬI ẢNH BÁO BÀN]: {ex}")
-                                await self.client.send_message(target_preview_entity, preview_caption)
+                                await self.client.send_message(
+                                    target_preview_entity, preview_caption
+                                )
                         elif target_preview_entity:
-                            await self.client.send_message(target_preview_entity, preview_caption)
-                        elif target_preview_group:
-                            self.log(
-                                f"[SKIP ẢNH BÁO BÀN] Không resolve được nhóm {target_preview_group}"
+                            await self.client.send_message(
+                                target_preview_entity, preview_caption
                             )
-                    # Không sleep 20s ở đây — lệnh HÔ đã gửi trước, không được chặn round hô.
+                        else:
+                            self.log(
+                                f"[SKIP ẢNH BÁO BÀN] Không resolve được {target_preview_group}"
+                            )
+                elif self.config.get('is_virtual'):
+                    self.log("[BÁO BÀN] Bỏ qua — nhóm ảo không báo bàn")
                 return True
 
             # Luồng mới: tin1-2 → báo bàn → tin3 → hô → ảnh stamp → outcome → tin5
@@ -2527,9 +2804,11 @@ class TelegramForwardBot:
 
             # 2. Báo bàn xong → chờ đúng 20s → mới bắt đầu nghe HÔ main
             preview_first = bool(
-                self.config.get('send_table_preview')
-                or self.config.get('send_custom_table_text')
-                or self.config.get('table_preview_before_ho')
+                self.should_send_table_preview()
+                or (
+                    self.config.get('send_custom_table_text')
+                    and not self.config.get('is_virtual')
+                )
             )
             if preview_first:
                 ns0, table0 = await pick_live_main_table(self.bot_id, self.name)

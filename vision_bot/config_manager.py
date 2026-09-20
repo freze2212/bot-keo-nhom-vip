@@ -113,7 +113,7 @@ DEFAULT_CONFIG = {
     },
     "step_verify": {
         "enabled": True,
-        "save_debug": True,
+        "save_debug": False,
         "debug_dir": "captures/step_debug",
         "auto_recover": True,
         "recover_on_bet_miss": True,

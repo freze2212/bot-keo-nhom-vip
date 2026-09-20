@@ -43,7 +43,14 @@ from chrome_launcher import ensure_chrome_up
 from settlement import SettlementDetector, save_settlement_capture, get_taskbar_height
 from bet_window import BetVerifier, betting_open_score
 from login_flow import run_enter_sexy_flow, login_home_url
-from shot_store import publish_sexy_shot
+from shot_store import (
+    publish_sexy_shot,
+    prune_live_captures,
+    clear_step_debug,
+    keep_latest_shots,
+    migrate_legacy_to_slots,
+    KEEP_SHOTS,
+)
 import random
 
 @dataclass
@@ -139,6 +146,40 @@ def _crop_roi(frame, roi):
     if y + h > frame.shape[0] or x + w > frame.shape[1] or x < 0 or y < 0:
         return None
     return frame[y : y + h, x : x + w]
+
+
+def _frame_looks_like_game(frame, config, log=None) -> tuple[bool, str]:
+    """Chặn ảnh Cursor/IDE/homepage — chỉ nhận khi đang trên bàn Sexy."""
+    if frame is None:
+        return False, "frame=None"
+    try:
+        from step_verify import check_on_table
+
+        ok, detail = check_on_table(frame, config)
+        if ok:
+            return True, detail
+        return False, f"not_on_table|{detail}"
+    except Exception as ex:
+        return False, f"check_err|{ex}"
+
+
+def _relock_grab(wc, grabber, target_rect, maximize, profile, nav, win_rect_fallback, log=None):
+    """Khóa lại Chrome profile rồi chụp — tránh grab nhầm Cursor/cửa sổ khác."""
+    live = None
+    try:
+        live = lock_window(
+            wc, target_rect, retries=3, maximize=maximize, profile_dir=profile
+        )
+    except Exception as ex:
+        if log:
+            log.warn(f"relock fail: {ex}")
+    if live:
+        nav.set_window_rect(live)
+        fr = grabber.grab_window(live)
+        if fr is not None:
+            return live, fr
+    fr = grabber.grab_window(win_rect_fallback) if win_rect_fallback else None
+    return win_rect_fallback, fr
 
 
 def _winner_code(label: str) -> str:
@@ -353,6 +394,14 @@ def main():
         save_config(config)
 
     capture_dir = _ensure_capture_dir(config)
+    # 3 slot: LAST_WIN + CURRENT + PREVIEW; xóa step_debug / legacy
+    clear_step_debug((config.get("step_verify") or {}).get("debug_dir"))
+    migrate_legacy_to_slots(config.get("table_name") or "C01")
+    prune_live_captures(capture_dir, keep=KEEP_SHOTS)
+    keep_latest_shots(config.get("table_name") or "C01", keep=KEEP_SHOTS)
+    log.info(
+        f"Shot store: LAST_WIN + CURRENT + PREVIEW | live={capture_dir}"
+    )
     target_rect = config.get("window_rect", {"x": 0, "y": 0, "width": 1920, "height": 1080})
     maximize = bool(config.get("maximize_window", False))
     profile = _profile_dir(config)
@@ -450,16 +499,28 @@ def main():
             log.event("VISION_BET_PUBLISH", f"side={side} (socket place_bet)")
 
     def handle_force_capture(data):
-        """Tele báo bàn / force → chụp live ngay, publish sexy_* (giữ 2)."""
-        live = nav.window_rect or win_rect
-        frame = grabber.grab_window(live) if live else None
+        """Tele báo bàn → chụp Chrome bàn Sexy (không nhận Cursor/IDE)."""
+        nonlocal win_rect
+        live2, frame = _relock_grab(
+            wc, grabber, target_rect, maximize, profile, nav, win_rect or nav.window_rect, log
+        )
+        if live2:
+            win_rect = live2
         if frame is None:
+            log.warn("FORCE_CAPTURE skip — grab None")
+            return
+        ok_g, det = _frame_looks_like_game(frame, config, log)
+        if not ok_g:
+            log.warn(f"FORCE_CAPTURE skip — không phải bàn game ({det})")
             return
         winner = data.get("resultWinner") or ""
         kind = "PREVIEW" if not winner or str(winner).upper() in ("X", "PREVIEW", "") else "RESULT"
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = os.path.join(capture_dir, f"FORCE_{table_name}_{kind}_{stamp}.png")
         save_settlement_capture(frame, path, top_skip, tb, side_skip_frac=side_skip)
+        if not os.path.exists(path) or os.path.getsize(path) < 200_000:
+            log.warn("FORCE_CAPTURE skip — file quá nhỏ / blank")
+            return
         pub = publish_sexy_shot(
             path,
             table_name,
@@ -495,7 +556,8 @@ def main():
 
     log.ok(f"Loop start table={table_name} ns={name_service}")
     log.info(
-        f"DoD: BET_OK + SETTLEMENT | auto_bet={auto_bet} random={auto_bet_random} | giữ 6 sexy_*"
+        f"DoD: BET_OK + SETTLEMENT | auto_bet={auto_bet} random={auto_bet_random} "
+        f"| slots LAST_WIN/LOSS/TIE + CURRENT + PREVIEW"
     )
     log.info("-" * 60)
     last_profile_check = 0.0
@@ -620,15 +682,61 @@ def main():
                         f"{table_name}_{wcode}_{stamp}_SETTLE.png",
                     )
                     time.sleep(0.5)
-                    frame_shot = grabber.grab_window(win_rect)
+                    live2, frame_shot = _relock_grab(
+                        wc,
+                        grabber,
+                        target_rect,
+                        maximize,
+                        profile,
+                        nav,
+                        win_rect,
+                        log,
+                    )
+                    if live2:
+                        win_rect = live2
                     if frame_shot is None:
                         frame_shot = frame
+                    ok_g, det = _frame_looks_like_game(frame_shot, config, log)
+                    if not ok_g:
+                        log.warn(f"SETTLEMENT skip publish — không phải bàn game ({det})")
+                        continue
                     save_settlement_capture(
                         frame_shot, path, top_skip, tb, side_skip_frac=side_skip
                     )
+                    if not os.path.exists(path) or os.path.getsize(path) < 200_000:
+                        log.warn("SETTLEMENT skip publish — file quá nhỏ (có thể ảnh Cursor/blank)")
+                        continue
                     out_key = _outcome_key_from_settlement(
                         sett.get("outcome"), sett.get("reason")
                     )
+                    # Đọc lại toast trên frame vừa chụp — tránh live_lose nhầm khi ảnh rõ WIN+
+                    try:
+                        from settlement import classify_settlement_frame
+
+                        cls = classify_settlement_frame(frame_shot, config)
+                        if cls.get("ok"):
+                            frame_key = _outcome_key_from_settlement(
+                                cls.get("outcome"), ""
+                            )
+                            if frame_key and frame_key != out_key:
+                                log.warn(
+                                    f"SETTLEMENT toast frame≠sett: "
+                                    f"sett={out_key} frame={frame_key} ({cls.get('detail')}) "
+                                    f"→ dùng frame"
+                                )
+                                out_key = frame_key
+                                w2 = _infer_winner_from_bet(
+                                    last_vision_bet.get("side"),
+                                    cls.get("outcome"),
+                                    "",
+                                )
+                                if w2 != "X":
+                                    wcode = w2
+                            elif frame_key:
+                                out_key = frame_key
+                    except Exception as ex:
+                        log.warn(f"SETTLEMENT reclassify skip: {ex}")
+                    # LOSS → CURRENT+LAST_LOSS; WIN → CURRENT+LAST_WIN; TIE → LAST_TIE
                     pub = publish_sexy_shot(
                         path,
                         table_name,

@@ -232,7 +232,7 @@
     },
     "step_verify": {
         "enabled": true,
-        "save_debug": true,
+        "save_debug": false,
         "debug_dir": "captures/step_debug",
         "auto_recover": true,
         "recover_on_bet_miss": true,
