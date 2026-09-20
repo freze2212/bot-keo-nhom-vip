@@ -68,6 +68,7 @@ DEFAULT_CONFIG = {
     "server_url": "http://127.0.0.1:3201",
     "name_service": "NS1",
     "table_name": "C01",
+    "table_ocr_interval_sec": 12,
     "capture_dir": "captures/live",
     "game_url": "",
     "chrome_exe": "",

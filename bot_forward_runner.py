@@ -1990,6 +1990,61 @@ class TelegramForwardBot:
     def log(self, msg):
         log(msg, self.name)
 
+    def sync_session_table_from_vision(self):
+        """Lấy bàn đang active từ vision (NS) — báo bàn đúng Cxx, không cứng C01."""
+        ns = str(self.name_service or self.config.get("name_service") or "NS1").upper()
+        row = _probe_ns_active_table(ns)
+        if row and row.get("table"):
+            tbl = str(row["table"]).upper().strip()
+            if tbl and tbl not in ("NONE", "LOBBY"):
+                if tbl != str(self.session_table or "").upper():
+                    self.log(f"[BÀN] session_table {self.session_table} → {tbl} (vision/{ns})")
+                self.session_table = tbl
+                return tbl
+        # Fallback: OCR file PREVIEW/CURRENT mới nhất trên disk
+        try:
+            _vb = os.path.join(ROOT_DIR, "vision_bot")
+            if _vb not in sys.path:
+                sys.path.insert(0, _vb)
+            from table_reader import read_table_from_image  # noqa: E402
+
+            search_dirs = [
+                os.path.join(ROOT_DIR, "public", "screenshots"),
+                os.path.join(ROOT_DIR, "vision_bot", "captures", "live"),
+            ]
+            newest = None
+            newest_m = -1
+            for sdir in search_dirs:
+                if not os.path.isdir(sdir):
+                    continue
+                for name in os.listdir(sdir):
+                    low = name.lower()
+                    if not low.endswith(".png"):
+                        continue
+                    if "preview" not in low and "current" not in low and "settle" not in low:
+                        continue
+                    path = os.path.join(sdir, name)
+                    try:
+                        m = os.path.getmtime(path)
+                    except OSError:
+                        continue
+                    if m > newest_m:
+                        newest_m = m
+                        newest = path
+            if newest:
+                tbl, det = read_table_from_image(newest)
+                if tbl:
+                    if tbl != str(self.session_table or "").upper():
+                        self.log(
+                            f"[BÀN] session_table {self.session_table} → {tbl} "
+                            f"(OCR {os.path.basename(newest)})"
+                        )
+                    self.session_table = tbl
+                    return tbl
+        except Exception as ex:
+            self.log(f"[BÀN] sync OCR fallback lỗi: {ex}")
+        return self.session_table
+
     async def connect_and_login(self, interactive=True):
         try:
             self.client = await get_or_create_client(self.session_name, self.api_id, self.api_hash)
@@ -2221,9 +2276,11 @@ class TelegramForwardBot:
         """
         step = config_step_delay(self.config, 20)
         is_virtual = bool(self.config.get("is_virtual"))
+        self.sync_session_table_from_vision()
         self.log(
             f"BẮT ĐẦU PHIÊN PRIOR-ROUND "
-            f"({'ẢO' if is_virtual else 'THẬT'} | cược {self.bet_amount_label})"
+            f"({'ẢO' if is_virtual else 'THẬT'} | cược {self.bet_amount_label} "
+            f"| bàn {self.session_table})"
         )
 
         await self._forward_order(
@@ -2247,6 +2304,7 @@ class TelegramForwardBot:
 
         # Báo bàn: CHỈ nhóm THẬT theo ca; có table_preview_group_id → gửi nhóm riêng
         if self.should_send_table_preview():
+            self.sync_session_table_from_vision()
             before_m = time.time() - 0.5
             self.log(f"[BÁO BÀN] Request capture live bàn {self.session_table}...")
             request_live_capture(self.session_table, name_service=self.name_service)
@@ -2314,6 +2372,7 @@ class TelegramForwardBot:
         result_win = None
 
         if is_virtual:
+            self.sync_session_table_from_vision()
             path, table_win, outcome_key, bet_side = pick_virtual_slot_for_rates(
                 self.session_table,
                 win_rate=float(self.config.get("win_rate", 0.8)),

@@ -470,6 +470,62 @@ def main():
     pending_bet_side = {"side": None}
     last_vision_bet = {"side": None, "round": None}
     stats = {"bet_ok": 0, "bet_miss": 0, "settlement_cap": 0}
+    # Bàn sống — OCR từ màn (Baccarat Cxx), không tin cứng C01
+    live_table = {"name": table_name, "last_ocr": 0.0}
+
+    def current_table() -> str:
+        return str(live_table.get("name") or table_name or "C01").upper()
+
+    def refresh_live_table(frame, force: bool = False, reason: str = "") -> str:
+        """Đọc Baccarat Cxx trên frame → cập nhật live_table + notify server."""
+        now = time.time()
+        interval = float(config.get("table_ocr_interval_sec") or 12)
+        if not force and (now - float(live_table.get("last_ocr") or 0)) < interval:
+            return current_table()
+        live_table["last_ocr"] = now
+        if frame is None:
+            return current_table()
+        try:
+            from table_reader import read_table_from_frame
+
+            detected, detail = read_table_from_frame(frame, config)
+        except Exception as ex:
+            log.warn(f"TABLE OCR lỗi: {ex}")
+            return current_table()
+        if not detected:
+            if force:
+                log.warn(f"TABLE OCR miss ({reason}): {detail}")
+            return current_table()
+        prev = current_table()
+        if detected != prev:
+            live_table["name"] = detected
+            log.ok(f"TABLE OCR {prev} → {detected} ({reason or 'poll'}) | {detail}")
+            try:
+                from shot_store import rekey_table_slots
+
+                moved = rekey_table_slots(prev, detected)
+                if moved:
+                    log.info(f"Shot store rekey {prev}→{detected}: {moved} file(s)")
+            except Exception as ex:
+                log.warn(f"rekey slots: {ex}")
+            try:
+                config["table_name"] = detected
+                save_config(config)
+            except Exception:
+                pass
+            try:
+                bridge.notify_active_table(detected)
+            except Exception:
+                pass
+        elif force or not live_table.get("notified"):
+            live_table["notified"] = True
+            try:
+                bridge.notify_active_table(detected)
+            except Exception:
+                pass
+            if force:
+                log.info(f"TABLE OCR confirm {detected} ({reason}) | {detail}")
+        return current_table()
 
     verifier = BetVerifier()
     settlement = SettlementDetector(
@@ -495,8 +551,9 @@ def main():
         stats["bet_ok" if ok else "bet_miss"] += 1
         if ok:
             last_vision_bet["side"] = side
-            bridge.notify_vision_bet(table_name, side, last_vision_bet.get("round"))
-            log.event("VISION_BET_PUBLISH", f"side={side} (socket place_bet)")
+            tbl = current_table()
+            bridge.notify_vision_bet(tbl, side, last_vision_bet.get("round"))
+            log.event("VISION_BET_PUBLISH", f"side={side} table={tbl} (socket place_bet)")
 
     def handle_force_capture(data):
         """Tele báo bàn → chụp Chrome bàn Sexy (không nhận Cursor/IDE)."""
@@ -513,24 +570,25 @@ def main():
         if not ok_g:
             log.warn(f"FORCE_CAPTURE skip — không phải bàn game ({det})")
             return
+        tbl = refresh_live_table(frame, force=True, reason="force_capture")
         winner = data.get("resultWinner") or ""
         kind = "PREVIEW" if not winner or str(winner).upper() in ("X", "PREVIEW", "") else "RESULT"
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = os.path.join(capture_dir, f"FORCE_{table_name}_{kind}_{stamp}.png")
+        path = os.path.join(capture_dir, f"FORCE_{tbl}_{kind}_{stamp}.png")
         save_settlement_capture(frame, path, top_skip, tb, side_skip_frac=side_skip)
         if not os.path.exists(path) or os.path.getsize(path) < 200_000:
             log.warn("FORCE_CAPTURE skip — file quá nhỏ / blank")
             return
         pub = publish_sexy_shot(
             path,
-            table_name,
+            tbl,
             result_winner=winner if kind == "RESULT" else None,
             round_num=data.get("roundNum"),
             kind=kind,
         )
-        log.event("FORCE_CAPTURE", pub or path)
+        log.event("FORCE_CAPTURE", f"{pub or path} table={tbl}")
         if kind == "RESULT" and winner:
-            bridge.notify_screenshot(table_name, pub or path, winner, data.get("roundNum"))
+            bridge.notify_screenshot(tbl, pub or path, winner, data.get("roundNum"))
 
     bridge = VisionBridge(
         server_url=_server_url(config),
@@ -541,7 +599,7 @@ def main():
     if config.get("listen_socket_place_bet", True):
         bridge.start_socket()
         log.info(f"Socket → {_server_url(config)}")
-    bridge.notify_active_table(table_name)
+    bridge.notify_active_table(current_table())
 
     detector = VisualDetector(config.get("color_thresholds"))
     state_machine = GameStateMachine()
@@ -554,10 +612,10 @@ def main():
         recover_cooldown_sec=float(config.get("recover_cooldown_sec") or 45),
     )
 
-    log.ok(f"Loop start table={table_name} ns={name_service}")
+    log.ok(f"Loop start table={current_table()} ns={name_service}")
     log.info(
         f"DoD: BET_OK + SETTLEMENT | auto_bet={auto_bet} random={auto_bet_random} "
-        f"| slots LAST_WIN/LOSS/TIE + CURRENT + PREVIEW"
+        f"| slots LAST_WIN/LOSS/TIE + CURRENT + PREVIEW | OCR bàn live"
     )
     log.info("-" * 60)
     last_profile_check = 0.0
@@ -614,6 +672,8 @@ def main():
                         last_frame = frame
 
             if frame is not None:
+                # Đọc mã bàn Baccarat Cxx (định kỳ)
+                refresh_live_table(frame, force=False, reason="poll")
                 # Cửa đặt: dùng bet_window (HSV neon góc live + Chúc may mắn)
                 # — không dùng roi_timer BGR giữa màn (luôn EMPTY → không AUTO_BET).
                 sc = betting_open_score(frame, config)
@@ -637,7 +697,9 @@ def main():
                 if et == "NEW_ROUND_START":
                     settlement.reset_round()
                     settlement.on_betting()
-                    log.event("NEW_ROUND", f"#{ed}")
+                    if frame is not None:
+                        refresh_live_table(frame, force=True, reason="new_round")
+                    log.event("NEW_ROUND", f"#{ed} table={current_table()}")
                     if auto_bet:
                         if pending_bet_side["side"]:
                             side = pending_bet_side["side"]
@@ -646,7 +708,7 @@ def main():
                         else:
                             side = default_side
                         pending_bet_side["side"] = None
-                        log.info(f"AUTO_BET random/side={side}")
+                        log.info(f"AUTO_BET random/side={side} table={current_table()}")
                         ok = place_and_verify(
                             nav, grabber, win_rect, config, side, verifier, log, wc=wc
                         )
@@ -654,8 +716,11 @@ def main():
                         if ok:
                             last_vision_bet["side"] = side
                             last_vision_bet["round"] = ed
-                            bridge.notify_vision_bet(table_name, side, ed)
-                            log.event("VISION_BET_PUBLISH", f"side={side} round={ed}")
+                            bridge.notify_vision_bet(current_table(), side, ed)
+                            log.event(
+                                "VISION_BET_PUBLISH",
+                                f"side={side} round={ed} table={current_table()}",
+                            )
                 elif et == "DEALING_STARTED":
                     settlement.on_dealing(bal_c)
                     log.event("DEALING", "arm settlement detector")
@@ -677,9 +742,10 @@ def main():
                             sett.get("reason"),
                         )
                     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    tbl = current_table()
                     path = os.path.join(
                         capture_dir,
-                        f"{table_name}_{wcode}_{stamp}_SETTLE.png",
+                        f"{tbl}_{wcode}_{stamp}_SETTLE.png",
                     )
                     time.sleep(0.5)
                     live2, frame_shot = _relock_grab(
@@ -700,6 +766,13 @@ def main():
                     if not ok_g:
                         log.warn(f"SETTLEMENT skip publish — không phải bàn game ({det})")
                         continue
+                    tbl = refresh_live_table(
+                        frame_shot, force=True, reason="settlement"
+                    )
+                    path = os.path.join(
+                        capture_dir,
+                        f"{tbl}_{wcode}_{stamp}_SETTLE.png",
+                    )
                     save_settlement_capture(
                         frame_shot, path, top_skip, tb, side_skip_frac=side_skip
                     )
@@ -739,7 +812,7 @@ def main():
                     # LOSS → CURRENT+LAST_LOSS; WIN → CURRENT+LAST_WIN; TIE → LAST_TIE
                     pub = publish_sexy_shot(
                         path,
-                        table_name,
+                        tbl,
                         result_winner=wcode if wcode != "X" else None,
                         round_num=state_machine.round_counter,
                         kind="RESULT",
@@ -750,19 +823,19 @@ def main():
                         f"SETTLEMENT capture reason={sett['reason']} "
                         f"outcome={sett.get('outcome')} →{out_key} delta={sett['delta']} "
                         f"banner={sett['banner']} wcode={wcode} "
-                        f"bet={last_vision_bet.get('side')} → {pub or path}"
+                        f"bet={last_vision_bet.get('side')} table={tbl} → {pub or path}"
                     )
                     notify_win = wcode if wcode != "X" else _winner_code(state_machine.last_result or "")
                     if notify_win in ("B", "P", "T"):
                         bridge.notify_screenshot(
-                            table_name,
+                            tbl,
                             pub or path,
                             notify_win,
                             state_machine.round_counter,
                         )
                     log.info(
                         f"STATS bet_ok={stats['bet_ok']} bet_miss={stats['bet_miss']} "
-                        f"settle_cap={stats['settlement_cap']}"
+                        f"settle_cap={stats['settlement_cap']} table={tbl}"
                     )
 
             if config.get("auto_recover", True):
@@ -772,7 +845,7 @@ def main():
                     new_rect = full_recover(config, wc, nav, log, reason, grabber=grabber)
                     if new_rect:
                         win_rect = new_rect
-                        bridge.notify_active_table(table_name)
+                        bridge.notify_active_table(current_table())
                         state_machine = GameStateMachine()
                         settlement = SettlementDetector(
                             change_threshold=float(config.get("settlement_threshold") or 8.0),

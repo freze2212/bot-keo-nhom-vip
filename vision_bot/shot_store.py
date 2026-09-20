@@ -183,6 +183,35 @@ def prune_table_to_slots(table_name: str) -> int:
     return removed
 
 
+def rekey_table_slots(old_table: str, new_table: str) -> int:
+    """Khi OCR đổi C01→C09: copy slot sexy_old_* → sexy_new_* (giữ file cũ)."""
+    old_k = _table_key(old_table)
+    new_k = _table_key(new_table)
+    if old_k == new_k:
+        return 0
+    d = public_screenshot_dir()
+    n = 0
+    try:
+        names = list(os.listdir(d))
+    except OSError:
+        return 0
+    prefix = f"sexy_{old_k}_"
+    for name in names:
+        if not name.startswith(prefix) or not name.lower().endswith(".png"):
+            continue
+        src = os.path.join(d, name)
+        dest_name = name.replace(prefix, f"sexy_{new_k}_", 1)
+        dest = os.path.join(d, dest_name)
+        if os.path.exists(dest):
+            continue
+        if _write_file(src, dest):
+            n += 1
+            print(f"[ShotStore] Rekey {name} → {dest_name}")
+    if n:
+        prune_table_to_slots(new_k)
+    return n
+
+
 def migrate_legacy_to_slots(table_name: str) -> None:
     """Boot: đổ legacy vào LAST_WIN/LOSS/TIE + CURRENT + PREVIEW."""
     d = public_screenshot_dir()

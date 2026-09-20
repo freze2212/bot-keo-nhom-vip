@@ -12,3 +12,4 @@ pygetwindow
 psutil
 requests
 numpy
+rapidocr-onnxruntime
