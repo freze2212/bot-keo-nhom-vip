@@ -87,8 +87,8 @@ DEFAULT_CONFIG = {
     "dismiss_steps": [],
     "login_points": {
         "open_login": {"x": 1750, "y": 40, "delay_after": 1.2},
-        "username": {"x": 960, "y": 420},
-        "password": {"x": 960, "y": 500},
+        "username": {"x": 1071, "y": 546},
+        "password": {"x": 1070, "y": 603},
         "submit": {"x": 960, "y": 600},
     },
     "roi_timer": {"x": 580, "y": 210, "width": 120, "height": 50},
@@ -145,7 +145,35 @@ _MERGE_KEYS = (
 )
 
 
+def ensure_config_file():
+    if not os.path.exists(CONFIG_FILE):
+        save_config(dict(DEFAULT_CONFIG))
+        return True
+    return False
+
+
+def validate_config(config_data):
+    warnings = []
+    if not isinstance(config_data, dict):
+        return ["Config không phải dict hợp lệ"]
+
+    login_points = config_data.get("login_points") or {}
+    for key in ("open_login", "username", "password", "submit"):
+        point = login_points.get(key) or {}
+        if not isinstance(point, dict) or "x" not in point or "y" not in point:
+            warnings.append(f"Thiếu login_points.{key} (x,y)")
+
+    if not config_data.get("dismiss_steps"):
+        warnings.append("dismiss_steps rỗng — popup sẽ không bị đóng nếu xuất hiện")
+
+    if not config_data.get("server_url"):
+        warnings.append("server_url trống — socket/API có thể không kết nối được")
+
+    return warnings
+
+
 def load_config():
+    ensure_config_file()
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
@@ -157,6 +185,7 @@ def load_config():
                     tmp = dict(DEFAULT_CONFIG[key])
                     tmp.update(data[key])
                     merged[key] = tmp
+            # Keep the active file as runtime source of truth for login points and navigation.
             return merged
         except Exception:
             pass
@@ -164,5 +193,6 @@ def load_config():
 
 
 def save_config(config_data):
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(config_data, f, indent=4, ensure_ascii=False)

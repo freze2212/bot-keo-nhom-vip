@@ -52,18 +52,18 @@
             "delay_after": 1.5
         },
         "username": {
-            "x": 915,
-            "y": 445,
+            "x": 1071,
+            "y": 546,
             "delay_after": 0.6
         },
         "password": {
-            "x": 960,
-            "y": 505,
+            "x": 1070,
+            "y": 603,
             "delay_after": 0.5
         },
         "submit": {
-            "x": 960,
-            "y": 695,
+            "x": 1071,
+            "y": 800,
             "delay_after": 6.0
         }
     },
