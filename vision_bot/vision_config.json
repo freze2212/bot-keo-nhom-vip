@@ -20,7 +20,7 @@
     "listen_socket_place_bet": true,
     "server_url": "http://127.0.0.1:3201",
     "name_service": "NS1",
-    "table_name": "C09",
+    "table_name": "C08",
     "table_ocr_interval_sec": 12,
     "capture_dir": "captures/live",
     "game_url": "",
@@ -40,30 +40,30 @@
     "dismiss_steps": [
         {
             "name": "close_thong_bao",
-            "x": 1555,
-            "y": 218,
+            "x": 1542,
+            "y": 237,
             "delay_after": 1.0
         }
     ],
     "login_points": {
         "open_login": {
-            "x": 1347,
-            "y": 117,
+            "x": 1310,
+            "y": 136,
             "delay_after": 1.5
         },
         "username": {
-            "x": 1071,
-            "y": 546,
+            "x": 1069,
+            "y": 568,
             "delay_after": 0.6
         },
         "password": {
-            "x": 1070,
-            "y": 603,
+            "x": 1054,
+            "y": 621,
             "delay_after": 0.5
         },
         "submit": {
-            "x": 1071,
-            "y": 800,
+            "x": 1158,
+            "y": 799,
             "delay_after": 6.0
         }
     },
@@ -126,37 +126,37 @@
     "navigation_steps": [
         {
             "name": "5. Click Casino/Sexy",
-            "x": 546,
-            "y": 201,
+            "x": 578,
+            "y": 215,
             "delay_after": 3.5
         },
         {
             "name": "6. Click vào phòng chọn bàn",
-            "x": 450,
-            "y": 253,
+            "x": 453,
+            "y": 268,
             "delay_after": 8.0
         },
         {
             "name": "7. Click chọn bàn (ngẫu nhiên)",
-            "x": 891,
-            "y": 710,
+            "x": 993,
+            "y": 537,
             "delay_after": 5.0
         }
     ],
     "bet_points": {
         "player": {
-            "x": 841,
-            "y": 923,
+            "x": 1072,
+            "y": 915,
             "description": "Đặt CON"
         },
         "banker": {
-            "x": 1091,
-            "y": 922,
+            "x": 1055,
+            "y": 915,
             "description": "Đặt CÁI"
         },
         "confirm": {
-            "x": 1055,
-            "y": 1007,
+            "x": 1025,
+            "y": 981,
             "description": "Xác nhận cược"
         }
     },
@@ -216,14 +216,14 @@
     "table_popup_dismiss_steps": [
         {
             "name": "close_tin_nhan_1",
-            "x": 1751,
-            "y": 829,
+            "x": 1863,
+            "y": 1000,
             "delay_after": 0.6
         },
         {
             "name": "close_tin_nhan_2",
-            "x": 1865,
-            "y": 995,
+            "x": 808,
+            "y": 909,
             "delay_after": 0.6
         }
     ],
@@ -250,5 +250,10 @@
         "y": 979,
         "width": 160,
         "height": 56
-    }
+    },
+    "scroll_focus": {
+        "x": 1751,
+        "y": 833
+    },
+    "setup_recorded_at": "2026-09-23 18:48:17"
 }

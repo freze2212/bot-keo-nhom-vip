@@ -14,6 +14,7 @@ Mỗi bước: log STEP_OK/FAIL + verify ảnh (không tin click mù).
 from __future__ import annotations
 
 import os
+import random
 import time
 
 import pyautogui
@@ -389,13 +390,29 @@ def run_enter_sexy_flow(
             x, y = int(step["x"]), int(step["y"])
             delay = float(step.get("delay_after", 1.5))
             clicks = int(step.get("clicks", 1))
+            low_name = name.lower()
+            # Chỉ bước CHỌN BÀN (nav thứ 3+ / có candidates) — không đụng «phòng chọn bàn»
+            is_table_step = bool(step.get("candidates")) or i >= 3
+            if is_table_step:
+                cands = (
+                    list(step.get("candidates") or [])
+                    or list(config.get("table_click_candidates") or [])
+                )
+                cands = [c for c in cands if isinstance(c, dict) and "x" in c and "y" in c]
+                if len(cands) >= 2 and config.get("random_table_click", True):
+                    pick = random.choice(cands)
+                    x, y = int(pick["x"]), int(pick["y"])
+                    if log:
+                        log.info(
+                            f"NAV table RANDOM {len(cands)} vị trí → pick ({x},{y})"
+                        )
             if log:
                 log.info(f"NAV [{i}/{len(steps)}] {name} @ ({x},{y}) chờ {delay}s")
             nav.click_relative(x, y, delay_after=delay, clicks=clicks)
             after = _grab() if do_verify else None
             save_step_shot(after, f"nav_{i}", config, log)
 
-            low = name.lower()
+            low = low_name
             if do_verify and grabber is not None:
                 if i == 1 or "sexy" in low or "casino" in low:
                     ok_s, det_s = check_sexy_ok(before, after, config)

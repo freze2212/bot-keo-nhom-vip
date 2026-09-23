@@ -107,6 +107,9 @@ DEFAULT_CONFIG = {
         {"name": "6. Click Chơi ngay", "x": 620, "y": 350, "delay_after": 4.0},
         {"name": "7. Click Chọn Bàn", "x": 300, "y": 420, "delay_after": 3.0},
     ],
+    # 3 vị trí bàn — mỗi lần enter random 1 (ghi bằng record_setup_clicks)
+    "table_click_candidates": [],
+    "random_table_click": True,
     "bet_points": {
         "player": {"x": 841, "y": 923, "description": "Đặt CON"},
         "banker": {"x": 1091, "y": 922, "description": "Đặt CÁI"},
