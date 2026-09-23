@@ -1,0 +1,8 @@
+start
+windows=[('0xa026e', 'TRANG CHỦ CHÍNH THỨC RR88 - Google Chrome')]
+rect={'left': 0, 'top': 0, 'right': 1920, 'bottom': 1080, 'width': 1920, 'height': 1080}
+frame=1920x1080
+open=False timer=0.071 luck=0.0 yel=0.011
+chip B=0.209 P=0.7096
+player={'x': 841, 'y': 923, 'description': 'Đặt CON'} banker={'x': 1091, 'y': 922, 'description': 'Đặt CÁI'} confirm={'x': 1055, 'y': 1007, 'description': 'Xác nhận cược'}
+OK_SAVED

@@ -79,7 +79,7 @@ DEFAULT_CONFIG = {
     "recover_cooldown_sec": 45,
     "settlement_threshold": 8.0,
     "settlement_min_dealing_ms": 1500,
-    "bet_verify_delay_sec": 0.6,
+    "bet_verify_delay_sec": 0.25,
     "scroll_after_table": True,
     "scroll_notches": -18,
     "scroll_settle_sec": 1.2,

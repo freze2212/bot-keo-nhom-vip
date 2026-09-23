@@ -473,7 +473,12 @@ def run_enter_sexy_flow(
     if config.get("scroll_after_table", True):
         _log("=== 5/5 SCROLL xuống cuối bàn ===")
         bp = config.get("bet_points") or {}
-        focus = bp.get("player") or bp.get("confirm") or {}
+        focus = (
+            (config.get("scroll_focus") or {})
+            or bp.get("player")
+            or bp.get("confirm")
+            or {}
+        )
         sx = int(focus.get("x") or (win_rect.get("width") or 1920) // 2)
         sy = int(focus.get("y") or int((win_rect.get("height") or 1080) * 0.55))
         notches = int(config.get("scroll_notches") or -18)

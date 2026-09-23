@@ -70,18 +70,18 @@ class Navigator:
                     break
         if chip:
             print(f"[BET] Chọn chip @ ({chip['x']}, {chip['y']})")
-            self.click_relative(int(chip["x"]), int(chip["y"]), delay_after=0.35)
+            self.click_relative(int(chip["x"]), int(chip["y"]), delay_after=0.18)
 
         label = "CÁI/BANKER" if is_banker else "CON/PLAYER"
         print(f"[BET] Đặt {label} @ ({target['x']}, {target['y']})")
-        self.click_relative(int(target["x"]), int(target["y"]), delay_after=0.55)
+        self.click_relative(int(target["x"]), int(target["y"]), delay_after=0.28)
 
         confirm = bet_points.get("confirm")
         if confirm and "x" in confirm:
             # Đợi nút Xác nhận sáng một nhịp (sau khi chọn ô)
-            time.sleep(0.35)
+            time.sleep(0.12)
             print(f"[BET] Xác nhận @ ({confirm['x']}, {confirm['y']})")
-            self.click_relative(int(confirm["x"]), int(confirm["y"]), delay_after=0.5)
+            self.click_relative(int(confirm["x"]), int(confirm["y"]), delay_after=0.22)
         else:
             print("[BET] Không có tọa độ confirm — bỏ qua nút xác nhận")
         return True

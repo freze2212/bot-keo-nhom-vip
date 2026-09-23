@@ -341,7 +341,7 @@ def place_and_verify(
         log.err("BET_FAIL missing bet_points")
         log_step(log, "bet", False, "missing bet_points")
         return False
-    time.sleep(float(config.get("bet_verify_delay_sec") or 0.6))
+    time.sleep(float(config.get("bet_verify_delay_sec") or 0.25))
     frame1 = grabber.grab_window(win_rect)
     result = verifier.verify(
         side,
@@ -747,7 +747,7 @@ def main():
                         capture_dir,
                         f"{tbl}_{wcode}_{stamp}_SETTLE.png",
                     )
-                    time.sleep(0.5)
+                    time.sleep(float(config.get("settlement_shot_delay_sec") or 0.12))
                     live2, frame_shot = _relock_grab(
                         wc,
                         grabber,

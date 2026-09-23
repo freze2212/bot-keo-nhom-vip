@@ -863,7 +863,7 @@
       "name_service": "NS1",
       "session_table": "C01",
       "source_username": "frezeit",
-      "interval_minutes": 5,
+      "interval_minutes": 2,
       "run_now_on_start": true,
       "start_time": "00:00",
       "end_time": "23:55",
@@ -872,12 +872,25 @@
       "flow_prior_round": true,
       "ho_mode": "match_vision",
       "step_delay": 20,
-      "ho_pre_wait_sec": 20,
+      "ho_pre_wait_sec": 5,
       "ho_listen_timeout_sec": 90,
-      "opening_order": [0, 1],
-      "opening_delays": [20, 20],
-      "opening_after_preview": [2],
-      "opening_after_preview_delays": [20],
+      "post_ho_wait_sec": 0.5,
+      "result_poll_sec": 0.2,
+      "result_listen_timeout_sec": 60,
+      "opening_order": [
+        0,
+        1
+      ],
+      "opening_delays": [
+        20,
+        20
+      ],
+      "opening_after_preview": [
+        2
+      ],
+      "opening_after_preview_delays": [
+        20
+      ],
       "send_table_preview": true,
       "table_preview_before_ho": true,
       "send_table_preview_caption": "🎰 SẢNH SEXY BÀN : {table} 💎",
@@ -888,10 +901,14 @@
         "LOSS": 3,
         "TIE": 6
       },
-      "ending_order": [4],
-      "ending_delays": [20],
+      "ending_order": [
+        4
+      ],
+      "ending_delays": [
+        20
+      ],
       "min_source_messages": 7,
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "bot_forward_21",
@@ -904,7 +921,7 @@
       "name_service": "NS1",
       "session_table": "C01",
       "source_username": "frezeit",
-      "interval_minutes": 5,
+      "interval_minutes": 2,
       "run_now_on_start": true,
       "start_time": "00:00",
       "end_time": "23:55",
@@ -916,12 +933,25 @@
       "loss_rate": 0.15,
       "tie_rate": 0.05,
       "step_delay": 20,
-      "ho_pre_wait_sec": 20,
+      "ho_pre_wait_sec": 5,
       "ho_listen_timeout_sec": 90,
-      "opening_order": [0, 1],
-      "opening_delays": [20, 20],
-      "opening_after_preview": [2],
-      "opening_after_preview_delays": [20],
+      "post_ho_wait_sec": 0.5,
+      "result_poll_sec": 0.2,
+      "result_listen_timeout_sec": 60,
+      "opening_order": [
+        0,
+        1
+      ],
+      "opening_delays": [
+        20,
+        20
+      ],
+      "opening_after_preview": [
+        2
+      ],
+      "opening_after_preview_delays": [
+        20
+      ],
       "send_table_preview": false,
       "table_preview_before_ho": false,
       "send_table_preview_caption": "🎰 SẢNH SEXY BÀN : {table} 💎",
@@ -932,10 +962,15 @@
         "LOSS": 3,
         "TIE": 6
       },
-      "ending_order": [4],
-      "ending_delays": [20],
+      "ending_order": [
+        4
+      ],
+      "ending_delays": [
+        20
+      ],
       "min_source_messages": 7,
-      "enabled": true
+      "enabled": true,
+      "virtual_crop_left_frac": 0.3
     }
   ]
 }

@@ -888,6 +888,36 @@ def fetch_latest_vision_bet(table_name, name_service=None, max_age_ms=300000, mi
         return None
 
 
+def crop_image_left_frac(src_path, left_frac=0.30, out_dir=None, tag="vcrop"):
+    """Cắt bỏ `left_frac` phía trái ảnh (ẢO), giữ phần còn lại — trả path file mới."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return src_path
+    if not src_path or not os.path.exists(src_path):
+        return src_path
+    frac = float(left_frac or 0)
+    if frac <= 0:
+        return src_path
+    frac = min(0.8, max(0.0, frac))
+    try:
+        img = Image.open(src_path).convert("RGB")
+        w, h = img.size
+        x0 = int(round(w * frac))
+        if x0 <= 0 or x0 >= w - 8:
+            return src_path
+        cropped = img.crop((x0, 0, w, h))
+        dest_dir = out_dir or os.path.join(SCREENSHOT_DIR, "virtual_crop")
+        os.makedirs(dest_dir, exist_ok=True)
+        base = os.path.splitext(os.path.basename(src_path))[0]
+        dest = os.path.join(dest_dir, f"{base}_{tag}_L{int(frac * 100)}.png")
+        cropped.save(dest, "PNG")
+        return dest if os.path.exists(dest) else src_path
+    except Exception as ex:
+        log(f"[VIRTUAL CROP] lỗi: {ex}")
+        return src_path
+
+
 def stamp_outcome_on_image(src_path, outcome, bet_amount_label, out_dir=None):
     """Ghi THẮNG +N / THUA -N / HÒA 0 lên ảnh rồi trả path file mới."""
     try:
@@ -2415,7 +2445,7 @@ class TelegramForwardBot:
                     if bet_side:
                         self.log(f"[HÔ] Lắng nghe được cửa vision → {bet_side}")
                         break
-                    await asyncio.sleep(0.5)
+                await asyncio.sleep(0.25)
                 if not bet_side:
                     self.log("[HÔ] Hết thời gian lắng nghe — chưa có lệnh vision mới")
             if not bet_side and ho_mode == "match_shot" and new_win in ("B", "P"):
@@ -2429,7 +2459,10 @@ class TelegramForwardBot:
         bet_text_to_send = format_bet_for_config(self.config, bet_text_base)
         await send_text(bet_text_to_send, f"Đã gửi tin HÔ {bet_text_to_send}")
         after_ho_mtime = time.time()
-        await asyncio.sleep(step)
+        # Không sleep step_delay (20s) sau hô — chỉ nghỉ ngắn rồi poll ảnh ngay
+        post_ho = float(self.config.get("post_ho_wait_sec") or 0.8)
+        if post_ho > 0:
+            await asyncio.sleep(post_ho)
 
         if is_virtual:
             # Giữ nguyên shot ván cũ đã chọn — không chờ capture mới, không fallback
@@ -2437,6 +2470,7 @@ class TelegramForwardBot:
         else:
             # THẬT: chỉ nhận capture mới hơn thời điểm sau hô. Không PREVIEW cũ / folder ảo.
             settle_wait = int(self.config.get("result_listen_timeout_sec") or 60)
+            settle_poll = float(self.config.get("result_poll_sec") or 0.2)
             settle_deadline = time.time() + settle_wait
             result_shot, result_win = None, None
             while time.time() < settle_deadline:
@@ -2453,7 +2487,7 @@ class TelegramForwardBot:
                         f"winner={win} age={time.time() - mtime:.1f}s"
                     )
                     break
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(settle_poll)
             if not result_shot:
                 self.log(
                     f"[KẾT QUẢ THẬT] Hết {settle_wait}s — không có capture mới sau hô "
@@ -2461,10 +2495,12 @@ class TelegramForwardBot:
                 )
 
             if result_shot and os.path.exists(result_shot):
-                # THẬT: caption theo toast trên ảnh (+ hô), KHÔNG tin filename
-                # (vision từng gắn CURRENT_*_LOSS nhầm dù ảnh WIN+).
+                # Filename TIE/WT rõ → ưu tiên HÒA (toast mid-win giả hay đè nhầm).
+                file_outcome = outcome_from_shot_filename(result_shot)
+                file_win = winner_from_shot_filename(result_shot) or result_win
                 outcome_key = None
                 caption_src = "none"
+                # Toast reclassify chỉ tin khi có tín hiệu toast thật (không mid-win ảo)
                 try:
                     _vb = os.path.join(ROOT_DIR, "vision_bot")
                     if _vb not in sys.path:
@@ -2474,25 +2510,33 @@ class TelegramForwardBot:
 
                     cls = classify_saved_capture(result_shot, _load_vcfg())
                     kind = str((cls or {}).get("kind") or "").lower()
-                    if cls.get("ok") and kind in ("win", "lose", "tie"):
-                        outcome_key = {
-                            "win": "WIN",
-                            "lose": "LOSS",
-                            "tie": "TIE",
-                        }[kind]
+                    toast_kind = str(((cls or {}).get("toast") or {}).get("kind") or "none").lower()
+                    gold = float(((cls or {}).get("toast") or {}).get("gold") or 0)
+                    red = float(((cls or {}).get("toast") or {}).get("red") or 0)
+                    tie_g = float((cls or {}).get("tie_green") or 0)
+                    toast_strong = toast_kind in ("win", "lose", "tie") or gold >= 0.08 or red >= 0.12 or tie_g >= 0.35
+                    # File gắn TIE → luôn HÒA (không để mid=win giả → THẮNG)
+                    if file_outcome == "TIE" or file_win == "T" or kind == "tie":
+                        outcome_key = "TIE"
+                        result_win = "T"
+                        caption_src = "file-tie" if file_outcome == "TIE" or file_win == "T" else f"toast:{cls.get('detail')}"
+                    elif toast_strong and cls.get("ok") and kind in ("win", "lose"):
+                        outcome_key = {"win": "WIN", "lose": "LOSS"}[kind]
                         caption_src = f"toast:{cls.get('detail')}"
-                        # Sửa winner cho log: toast WIN → cửa hô; LOSE → cửa ngược
                         if kind == "win" and bet_side in ("B", "P"):
                             result_win = bet_side
                         elif kind == "lose" and bet_side in ("B", "P"):
                             result_win = "P" if bet_side == "B" else "B"
-                        elif kind == "tie":
-                            result_win = "T"
                 except Exception as ex:
                     self.log(f"[KẾT QUẢ THẬT] reclassify lỗi: {ex}")
                 if not outcome_key:
-                    # Fallback: hô × winner file (không tin tag _LOSS/_WIN trên tên)
-                    if result_win in ("B", "P", "T"):
+                    # Fallback: hô × winner file (WT_TIE → TIE)
+                    if file_outcome in ("WIN", "LOSS", "TIE"):
+                        outcome_key = file_outcome
+                        caption_src = "filename"
+                        if file_outcome == "TIE":
+                            result_win = "T"
+                    elif result_win in ("B", "P", "T"):
                         outcome_key = outcome_from_ho_and_winner(bet_side, result_win)
                         caption_src = "hô×winner"
                     else:
@@ -2506,10 +2550,20 @@ class TelegramForwardBot:
         send_path = result_shot
         result_caption = None
         if result_shot and os.path.exists(result_shot) and outcome_key:
+            # ẢO: cắt thêm % bên trái trước khi gửi (che roadmap / lệch frame)
+            if is_virtual:
+                vfrac = float(self.config.get("virtual_crop_left_frac") or 0.30)
+                if vfrac > 0:
+                    cropped = crop_image_left_frac(result_shot, left_frac=vfrac)
+                    if cropped and cropped != result_shot:
+                        self.log(
+                            f"[ẢO] Crop trái {int(vfrac * 100)}% → {os.path.basename(cropped)}"
+                        )
+                        send_path = cropped
             use_stamp = bool(self.config.get("stamp_result_on_image", True))
             if use_stamp:
                 send_path = stamp_outcome_on_image(
-                    result_shot, outcome_key, self.bet_amount_label
+                    send_path, outcome_key, self.bet_amount_label
                 )
             else:
                 result_caption = build_outcome_caption(outcome_key, self.bet_amount_label)
