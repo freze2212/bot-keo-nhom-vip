@@ -24,6 +24,8 @@ user_session*
 *.session-journal
 telegram_otp.txt
 telegram_2fa.txt
+customers/
+panel_data/
 
 # Bỏ qua thư mục 311
 311/

@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bot kéo nhóm — Cổng khách hàng</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f4f0e8;
+      --ink: #1c1917;
+      --muted: #78716c;
+      --card: #fffdf8;
+      --line: #e7e0d4;
+      --brand: #0f766e;
+      --brand2: #115e59;
+      --accent: #c2410c;
+      --ok: #15803d;
+      --danger: #b91c1c;
+      --shadow: 0 12px 40px rgba(28, 25, 23, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Be Vietnam Pro", system-ui, sans-serif;
+      background:
+        radial-gradient(900px 400px at 10% -10%, #ccfbf1 0%, transparent 50%),
+        radial-gradient(700px 360px at 100% 0%, #ffedd5 0%, transparent 45%),
+        var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+    header.app {
+      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+      margin-bottom: 1.25rem; flex-wrap: wrap;
+    }
+    .logo { font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em; }
+    .logo span { color: var(--brand); }
+    .pill {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: #fff; border: 1px solid var(--line); border-radius: 999px;
+      padding: 0.35rem 0.75rem; font-size: 0.8rem; color: var(--muted);
+    }
+    .pill strong { color: var(--ink); font-weight: 600; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+      box-shadow: var(--shadow); padding: 1.25rem 1.35rem; margin-bottom: 1rem;
+    }
+    .card h2 { margin: 0 0 0.35rem; font-size: 1.15rem; }
+    .card .sub { margin: 0 0 1rem; color: var(--muted); font-size: 0.9rem; }
+    .steps {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1.25rem;
+    }
+    @media (max-width: 720px) { .steps { grid-template-columns: 1fr 1fr; } }
+    .step {
+      border: 1px solid var(--line); background: #fff; border-radius: 14px;
+      padding: 0.75rem; cursor: pointer; transition: 0.15s ease;
+    }
+    .step:hover { border-color: #99f6e4; }
+    .step.on { border-color: var(--brand); background: #f0fdfa; box-shadow: inset 0 0 0 1px var(--brand); }
+    .step .n { font-size: 0.72rem; color: var(--brand); font-weight: 700; }
+    .step .t { font-size: 0.86rem; font-weight: 600; margin-top: 0.15rem; }
+    label.f { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.82rem; color: var(--muted); margin-bottom: 0.85rem; }
+    label.f b { color: var(--ink); font-weight: 600; }
+    input, select, textarea {
+      border: 1px solid var(--line); border-radius: 12px; padding: 0.7rem 0.85rem;
+      font: inherit; background: #fff; color: var(--ink);
+    }
+    input:focus, select:focus { outline: 2px solid #99f6e4; border-color: var(--brand); }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1rem; }
+    @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+    .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    button {
+      border: 0; border-radius: 12px; padding: 0.7rem 1rem; font: inherit; font-weight: 600;
+      cursor: pointer; background: var(--brand); color: #ecfdf5;
+    }
+    button:hover { background: var(--brand2); }
+    button.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+    button.danger { background: var(--danger); color: #fff; }
+    button.accent { background: var(--accent); color: #fff7ed; }
+    .hint { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
+    .hidden { display: none !important; }
+    #gate {
+      min-height: 100vh; display: grid; place-items: center; padding: 1rem;
+    }
+    .gate-card { width: min(420px, 100%); }
+    .toast {
+      position: fixed; right: 1rem; bottom: 1rem; background: var(--ink); color: #fff;
+      padding: 0.85rem 1rem; border-radius: 12px; max-width: 360px; display: none; z-index: 50;
+    }
+    .toast.show { display: block; }
+    .toast.err { background: var(--danger); }
+    .overlay {
+      position: fixed; inset: 0; background: rgba(28, 25, 23, 0.45);
+      display: none; place-items: center; z-index: 80; padding: 1rem;
+    }
+    .overlay.show { display: grid; }
+    .spinner {
+      width: 42px; height: 42px; border: 3px solid #ccfbf1; border-top-color: var(--brand);
+      border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 0.85rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .load-box, .modal-box {
+      background: #fffdf8; border: 1px solid var(--line); border-radius: 18px;
+      box-shadow: var(--shadow); padding: 1.5rem 1.35rem; width: min(380px, 100%); text-align: center;
+    }
+    .load-box p, .modal-box p { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.45; }
+    .modal-box h3 { margin: 0 0 0.5rem; font-size: 1.15rem; }
+    .modal-box.ok h3 { color: var(--ok); }
+    .modal-box.err h3 { color: var(--danger); }
+    .modal-box .row { justify-content: center; margin-top: 1.1rem; }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .go-live {
+      margin-top: 1.25rem; padding: 1rem 1.1rem; border-radius: 16px;
+      background: #f0fdfa; border: 1px dashed #99f6e4;
+    }
+    .go-live h3 { margin: 0 0 0.35rem; font-size: 1rem; }
+    .go-live p { margin: 0 0 0.85rem; color: var(--muted); font-size: 0.85rem; }
+    .group-list { display: flex; flex-direction: column; gap: 0.65rem; }
+    .group-item {
+      border: 1px solid var(--line); border-radius: 14px; padding: 0.9rem 1rem;
+      display: flex; justify-content: space-between; gap: 0.75rem; align-items: center; background: #fff;
+    }
+    .group-item.off { opacity: 0.72; background: #f5f5f4; }
+    .tag.pause { background: #fef3c7; color: #92400e; }
+    .tag.ok { background: #dcfce7; color: #166534; }
+    .tag.bad { background: #fee2e2; color: #991b1b; }
+    .tag.unk { background: #e7e5e4; color: #57534e; }
+    .overview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.65rem; margin-bottom: 0.85rem; }
+    @media (max-width: 640px) { .overview-grid { grid-template-columns: 1fr; } }
+    .stat {
+      background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 0.75rem 0.9rem;
+    }
+    .stat .n { font-size: 1.35rem; font-weight: 700; color: var(--brand); }
+    .stat .l { font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; }
+    .admin-lic {
+      background: #292524; border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 0.55rem;
+    }
+    .admin-lic .actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.55rem; }
+    .admin-lic input, .admin-lic select {
+      background: #1c1917; color: #fafaf9; border-color: #44403c; padding: 0.4rem 0.55rem;
+      border-radius: 8px; font-size: 0.82rem;
+    }
+    .ov-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.85rem 0 0.75rem; align-items: center; }
+    .ov-row {
+      border: 1px solid var(--line); border-radius: 14px; padding: 0.95rem 1rem;
+      background: #fff; display: grid; grid-template-columns: 1fr auto; gap: 0.75rem 1rem; align-items: center;
+    }
+    .ov-row.off { background: #f5f5f4; opacity: 0.9; }
+    .ov-row .title { font-weight: 600; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+    .ov-row .meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.4; }
+    .ov-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; }
+    @media (max-width: 640px) {
+      .ov-row { grid-template-columns: 1fr; }
+      .ov-actions { justify-content: flex-start; }
+    }
+    .tag { font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 999px; }
+    .tag.ao { background: #ffedd5; color: #9a3412; }
+    .tag.that { background: #ccfbf1; color: #115e59; }
+    .msg-grid { display: grid; gap: 0.4rem; max-height: 240px; overflow: auto; margin: 0.75rem 0; }
+    .msg {
+      border: 1px solid var(--line); border-radius: 10px; padding: 0.55rem 0.7rem;
+      cursor: pointer; background: #fff; font-size: 0.84rem;
+    }
+    .msg:hover { border-color: #5eead4; }
+    .msg.picked { border-color: var(--brand); background: #f0fdfa; }
+    .msg .idx { font-weight: 700; color: var(--brand); margin-right: 0.35rem; }
+    .slots { display: grid; gap: 0.75rem; }
+    .slot {
+      border: 1px dashed #cbd5e1; border-radius: 12px; padding: 0.75rem; background: #fafaf9;
+    }
+    .slot h4 { margin: 0 0 0.35rem; font-size: 0.9rem; }
+    .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; min-height: 2rem; }
+    .chip {
+      background: #ccfbf1; color: #115e59; border-radius: 999px; padding: 0.25rem 0.55rem;
+      font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    }
+    .chip:hover { background: #99f6e4; }
+    pre.log {
+      background: #1c1917; color: #e7e5e4; border-radius: 12px; padding: 0.75rem;
+      font-size: 0.72rem; max-height: 180px; overflow: auto; white-space: pre-wrap;
+    }
+    .admin-bar { background: #1c1917; color: #e7e5e4; border-radius: 14px; padding: 1rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <div id="gate">
+    <div class="card gate-card">
+      <h2>Chào bạn</h2>
+      <p class="sub">Nhập mã bạn đã nhận để bắt đầu cấu hình bot.</p>
+      <label class="f"><b>Mã của bạn</b>
+        <input id="loginKey" placeholder="Dán mã vào đây" />
+      </label>
+      <button type="button" id="btnEnter" style="width:100%;margin-top:0.5rem">Vào</button>
+      <p class="hint" id="gateErr" style="color:var(--danger);margin-top:0.75rem"></p>
+    </div>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="wrap">
+      <header class="app">
+        <div class="logo">Bot kéo <span>nhóm</span></div>
+        <div class="row">
+          <span class="pill" id="licPill">License —</span>
+          <button type="button" class="ghost" id="btnLogout">Thoát</button>
+        </div>
+      </header>
+
+      <div id="adminBox" class="admin-bar hidden">
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <div>
+            <strong>Quản lý mã khách</strong>
+            <div class="hint" style="color:#a8a29e;margin-top:0.25rem">
+              Tạo · gia hạn · sửa số nhóm · tắt / xóa mã. Xem mỗi mã đang chạy bao nhiêu nhóm.
+            </div>
+          </div>
+          <div class="row">
+            <button type="button" class="accent sm" id="btnStartFw">Bật tất cả bot</button>
+            <button type="button" class="danger sm" id="btnStopFw">Tắt tất cả bot</button>
+          </div>
+        </div>
+        <div class="row" style="margin-top:1rem;align-items:flex-end;flex-wrap:wrap">
+          <label class="f" style="margin:0;min-width:130px"><b style="color:#e7e5e4">Gói</b>
+            <select id="adminPlan">
+              <option value="trial">Dùng thử 3 ngày</option>
+              <option value="week">1 tuần</option>
+              <option value="month" selected>1 tháng</option>
+            </select>
+          </label>
+          <label class="f" style="margin:0;width:90px"><b style="color:#e7e5e4">Max nhóm</b>
+            <input id="adminMaxG" type="number" min="1" max="50" value="10" style="background:#292524;color:#fafaf9;border-color:#44403c" />
+          </label>
+          <label class="f" style="margin:0;flex:1;min-width:140px"><b style="color:#e7e5e4">Ghi chú</b>
+            <input id="adminNote" placeholder="Tên khách" style="background:#292524;color:#fafaf9;border-color:#44403c" />
+          </label>
+          <button type="button" id="btnMakeKey">Tạo mã</button>
+          <button type="button" class="ghost sm" id="btnReloadLic" style="color:#e7e5e4;border-color:#44403c;background:#292524">Làm mới</button>
+        </div>
+        <pre class="log" id="adminLog" style="margin-top:0.75rem">Mã vừa tạo hiện ở đây.</pre>
+        <div id="licList" style="margin-top:0.85rem"></div>
+      </div>
+
+      <div id="customerWizard">
+      <div id="userOverview" class="card">
+        <h2>Quản lý nhóm</h2>
+        <p class="sub" id="overviewSub">Đang tải…</p>
+        <div class="overview-grid" id="overviewStats"></div>
+        <div class="ov-toolbar">
+          <button type="button" id="btnAddAo">+ Nhóm ảo</button>
+          <button type="button" class="ghost" id="btnAddThat">+ Nhóm thật</button>
+          <button type="button" class="ghost" id="btnCheckHealth">Kiểm tra tình trạng</button>
+          <button type="button" class="accent" id="btnGoLiveTop">Bật bot</button>
+        </div>
+        <div id="overviewList" class="group-list"></div>
+        <div id="groupEditor" class="hidden" style="margin-top:1rem;border-top:1px solid var(--line);padding-top:1rem">
+          <h3 style="margin:0 0 0.75rem;font-size:1rem" id="geTitle">Sửa nhóm</h3>
+          <input type="hidden" id="ge_id" />
+          <div class="grid2">
+            <label class="f"><b>Tên nhóm</b><input id="ge_name" placeholder="VD: VIP ảo 1" /></label>
+            <label class="f"><b>ID nhóm Telegram</b><input id="ge_group_id" placeholder="-100…" />
+              <span class="hint">Mở nhóm trên Telegram → xem thông tin → copy ID.</span>
+            </label>
+            <label class="f"><b>Loại nhóm</b>
+              <select id="ge_virtual"><option value="true">Ảo</option><option value="false">Thật</option></select>
+            </label>
+            <label class="f"><b>Mức cược hiện trên tin</b><input id="ge_bet" value="1000" />
+              <span class="hint">Chữ hiện trên tin, VD: 1000.</span>
+            </label>
+            <label class="f"><b>Cách bao lâu chạy 1 lần?</b>
+              <select id="ge_interval"><option value="2">2 phút</option><option value="5" selected>5 phút</option><option value="10">10 phút</option></select>
+            </label>
+            <label class="f"><b>Mỗi lần hô mấy ván?</b>
+              <select id="ge_rounds"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+            </label>
+            <label class="f"><b>Bắt đầu lúc</b><input id="ge_start" type="time" value="08:00" /></label>
+            <label class="f"><b>Kết thúc lúc</b><input id="ge_end" type="time" value="23:00" /></label>
+            <label class="f"><b>Kéo 24/24 (hô liên tục)</b>
+              <select id="ge_continuous"><option value="false">Không — theo lịch</option><option value="true">Có — hô xong gửi KQ rồi hô tiếp</option></select>
+            </label>
+            <label class="f"><b>Nghỉ giữa mỗi ván (giây)</b><input id="ge_gap" type="number" min="0.5" max="30" step="0.5" value="2" /></label>
+            <label class="f"><b>Ảnh kết quả</b>
+              <select id="ge_crop">
+                <option value="">Mặc định</option>
+                <option value="bottom_right">Crop góc phải dưới (24/24)</option>
+                <option value="left">Crop bỏ trái (ảo cũ)</option>
+                <option value="none">Ảnh full</option>
+              </select>
+            </label>
+            <label class="f"><b>Token BotFather</b> (tuỳ chọn)
+              <input id="ge_token_bot" placeholder="123456:AA… — để trống = gửi bằng user" />
+              <span class="hint">Nhóm 24/24 dùng bot API; mỗi nhóm token riêng, không đụng nhóm khác.</span>
+            </label>
+          </div>
+          <div id="geContent" style="margin-top:0.75rem">
+            <h4 style="margin:0 0 0.5rem;font-size:0.95rem">Content hô / kết quả (riêng từng nhóm)</h4>
+            <p class="hint" style="margin:0 0 0.65rem">Placeholder: <code>{side}</code> <code>{side_emoji}</code> <code>{side_label}</code> <code>{stake}</code> <code>{table}</code> <code>{profit}</code> <code>{prev_result}</code>. Để trống = format mặc định.</p>
+            <div class="grid2">
+              <label class="f"><b>Kiểu hô</b>
+                <select id="ge_content_style">
+                  <option value="simple">Đơn giản (CON/CÁI + mức)</option>
+                  <option value="template">Template tự soạn</option>
+                  <option value="gap_thep">Gấp thếp + template</option>
+                </select>
+              </label>
+              <label class="f"><b>Bậc gấp thếp</b> (K)
+                <input id="ge_gap_ladder" value="50,100,200,400,800" />
+                <span class="hint">Chỉ dùng khi chọn Gấp thếp.</span>
+              </label>
+              <label class="f" style="grid-column:1/-1"><b>Template hô</b>
+                <textarea id="ge_ho_template" rows="6" placeholder="✅ TAY SAU ĐÁNH: {side_emoji} {side_label}
+🔈ĐẶT CƯỢC: {stake} K
+…"></textarea>
+              </label>
+              <label class="f"><b>Caption ảnh KQ</b>
+                <select id="ge_cap_mode">
+                  <option value="default">Mặc định THẮNG/THUA/HÒA</option>
+                  <option value="none">Không gửi chữ dưới ảnh</option>
+                  <option value="template">Template tự soạn</option>
+                </select>
+              </label>
+              <label class="f"><b>Stamp chữ lên ảnh?</b>
+                <select id="ge_stamp"><option value="false">Không — caption</option><option value="true">Có — đóng dấu ảnh</option></select>
+              </label>
+              <label class="f"><b>Caption THẮNG</b><input id="ge_cap_win" placeholder="THẮNG +{stake}" /></label>
+              <label class="f"><b>Caption THUA</b><input id="ge_cap_loss" placeholder="THUA -{stake}" /></label>
+              <label class="f"><b>Caption HÒA</b><input id="ge_cap_tie" placeholder="HÒA 0" /></label>
+            </div>
+          </div>
+          <div id="geBaoBan" class="grid2">
+            <label class="f"><b>Gửi ảnh bàn trước khi hô?</b>
+              <select id="ge_preview"><option value="false">Không</option><option value="true">Có</option></select>
+            </label>
+            <label class="f"><b>Gửi ảnh bàn sang nhóm khác?</b><input id="ge_preview_gid" placeholder="Để trống = gửi cùng nhóm" /></label>
+          </div>
+          <div class="row">
+            <button type="button" id="btnSaveGroup">Lưu nhóm</button>
+            <button type="button" class="ghost" id="btnCancelGroup">Đóng</button>
+            <button type="button" class="danger" id="btnDelGroup">Xóa nhóm</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="steps" id="steps">
+        <div class="step on" data-s="1"><div class="n">BƯỚC 1</div><div class="t">Telegram</div></div>
+        <div class="step" data-s="2"><div class="n">BƯỚC 2</div><div class="t">Chọn tin</div></div>
+        <div class="step" data-s="3"><div class="n">BƯỚC 3</div><div class="t">Lịch &amp; bật</div></div>
+      </div>
+
+      <!-- Step 1 -->
+      <section class="card" id="s1">
+        <h2>Kết nối Telegram</h2>
+        <p class="sub">Điền số điện thoại và thông tin Telegram của bạn, rồi nhận mã xác nhận về máy.</p>
+        <div class="grid2">
+          <label class="f"><b>Tên gọi</b><input id="display_name" placeholder="VD: Shop A" /></label>
+          <label class="f"><b>Số điện thoại</b><input id="phone" placeholder="+84…" /></label>
+          <label class="f"><b>API ID</b><input id="api_id" placeholder="Lấy tại my.telegram.org" /></label>
+          <label class="f"><b>API Hash</b><input id="api_hash" placeholder="Lấy tại my.telegram.org" /></label>
+          <label class="f"><b>Mật khẩu 2 lớp</b> (nếu có)<input id="twofa" type="password" /></label>
+          <label class="f"><b>Kênh lấy mẫu tin</b><input id="source_username" value="frezeit" /></label>
+        </div>
+        <div class="row">
+          <button type="button" id="btnSaveTele">Lưu</button>
+          <button type="button" class="ghost" id="btnSendOtp">Gửi mã xác nhận</button>
+          <input id="otp" placeholder="Mã Telegram gửi về" style="max-width:160px" />
+          <button type="button" class="accent" id="btnConfirmOtp">Xác nhận</button>
+        </div>
+        <p class="hint" style="margin-top:0.75rem">Chỉ cần xác nhận một lần. Xong thì thêm nhóm ở khung Quản lý phía trên.</p>
+      </section>
+
+      <!-- Step 2: messages -->
+      <section class="card hidden" id="s2">
+        <h2>Chọn tin nhắn sẽ gửi</h2>
+        <p class="sub">Chọn nhóm → tải tin mẫu → bấm ô bên dưới → bấm tin muốn gắn.</p>
+        <label class="f"><b>Nhóm đang xếp tin</b>
+          <select id="scriptGroup"></select>
+        </label>
+        <div class="row">
+          <button type="button" class="ghost" id="btnLoadMsgs">Tải tin mẫu</button>
+        </div>
+        <div class="msg-grid" id="msgGrid"></div>
+        <p class="hint">Đang gắn tin cho: <strong id="activeSlotLabel">—</strong></p>
+        <div class="slots">
+          <div class="slot" data-slot="open"><h4>① Tin mở đầu</h4><div class="chips" id="slot_open"></div></div>
+          <div class="slot" data-slot="after" id="slotAfterWrap"><h4>② Tin sau khi gửi ảnh bàn</h4><div class="chips" id="slot_after"></div></div>
+          <div class="slot" data-slot="win"><h4>③ Khi thắng</h4><div class="chips" id="slot_win"></div></div>
+          <div class="slot" data-slot="loss"><h4>④ Khi thua</h4><div class="chips" id="slot_loss"></div></div>
+          <div class="slot" data-slot="tie"><h4>⑤ Khi hòa</h4><div class="chips" id="slot_tie"></div></div>
+          <div class="slot" data-slot="end"><h4>⑥ Tin kết thúc</h4><div class="chips" id="slot_end"></div></div>
+        </div>
+        <div class="row" style="margin-top:1rem">
+          <button type="button" id="btnSaveScript">Lưu kịch bản</button>
+        </div>
+      </section>
+
+      <!-- Step 3: go live -->
+      <section class="card hidden" id="s3">
+        <h2>Bật bot</h2>
+        <p class="sub">Lịch từng nhóm chỉnh trong <b>Quản lý nhóm</b> (nút Sửa). Xong thì bật bot bên dưới.</p>
+        <div class="go-live" style="margin-top:0">
+          <h3>Bắt đầu kéo tin</h3>
+          <p>Bot sẽ chạy theo lịch từng nhóm bạn đã bật.</p>
+          <button type="button" class="accent" id="btnGoLive">Bật bot ngay</button>
+        </div>
+      </section>
+      </div><!-- /customerWizard -->
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <div class="overlay" id="loadingOv" aria-live="polite">
+    <div class="load-box">
+      <div class="spinner"></div>
+      <p id="loadingText">Đang xử lý…</p>
+    </div>
+  </div>
+  <div class="overlay" id="modalOv">
+    <div class="modal-box" id="modalBox">
+      <h3 id="modalTitle">Thông báo</h3>
+      <p id="modalMsg"></p>
+      <div class="row"><button type="button" id="modalOk">Đóng</button></div>
+    </div>
+  </div>
+
+  <script>
+    const API = "/panel/api";
+    let token = localStorage.getItem("pt") || "";
+    let role = localStorage.getItem("pr") || "";
+    let tenant = null;
+    let license = null;
+    let summary = null;
+    let messages = [];
+    let activeSlot = "open";
+    let editingGroupId = null;
+
+    const $ = (id) => document.getElementById(id);
+    let busy = false;
+    function toast(m, err) {
+      const el = $("toast");
+      el.textContent = m;
+      el.className = "toast show" + (err ? " err" : "");
+      setTimeout(() => el.classList.remove("show"), 4000);
+    }
+    function showLoading(msg) {
+      $("loadingText").textContent = msg || "Đang xử lý…";
+      $("loadingOv").classList.add("show");
+    }
+    function hideLoading() { $("loadingOv").classList.remove("show"); }
+    function showModal(ok, title, msg) {
+      const box = $("modalBox");
+      box.className = "modal-box " + (ok ? "ok" : "err");
+      $("modalTitle").textContent = title;
+      $("modalMsg").textContent = msg;
+      $("modalOv").classList.add("show");
+    }
+    $("modalOk").onclick = () => $("modalOv").classList.remove("show");
+    $("modalOv").onclick = (e) => { if (e.target === $("modalOv")) $("modalOv").classList.remove("show"); };
+
+    async function withBusy(msg, fn, { modalOk, modalFail } = {}) {
+      if (busy) return;
+      busy = true;
+      showLoading(msg);
+      try {
+        const r = await fn();
+        hideLoading();
+        if (modalOk) {
+          const title = typeof modalOk === "function" ? "Thành công" : (modalOk.title || "Thành công");
+          const body = typeof modalOk === "function"
+            ? modalOk(r)
+            : (typeof modalOk.msg === "function" ? modalOk.msg(r) : (modalOk.msg || "Xong."));
+          showModal(true, title, body);
+        }
+        return r;
+      } catch (e) {
+        hideLoading();
+        const err = e.message || String(e);
+        if (modalFail !== false) showModal(false, (modalFail && modalFail.title) || "Thất bại", err);
+        else toast(err, true);
+        throw e;
+      } finally {
+        busy = false;
+      }
+    }
+
+    async function api(path, opts = {}) {
+      const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
+      if (token) headers.Authorization = "Bearer " + token;
+      const r = await fetch(API + path, { ...opts, headers });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 401) { logout(false); throw new Error("Hết phiên đăng nhập"); }
+      if (!r.ok || j.ok === false) throw new Error(j.error || "Lỗi");
+      return j;
+    }
+
+    function logout(call) {
+      if (call && token) fetch(API + "/auth/logout", { method: "POST", headers: { Authorization: "Bearer " + token } });
+      token = ""; role = ""; tenant = null;
+      localStorage.removeItem("pt"); localStorage.removeItem("pr");
+      $("app").classList.add("hidden");
+      $("gate").classList.remove("hidden");
+    }
+
+    function showStep(n) {
+      [1, 2, 3].forEach((i) => {
+        const sec = $("s" + i);
+        if (sec) sec.classList.toggle("hidden", i !== n);
+        const step = document.querySelector(`.step[data-s="${i}"]`);
+        if (step) step.classList.toggle("on", i === n);
+      });
+    }
+
+    function toggleGroup(id, currentlyOn) {
+      return withBusy(currentlyOn ? "Đang dừng nhóm…" : "Đang bật nhóm…", async () => {
+        const j = await api("/tenant/groups/" + encodeURIComponent(id) + "/toggle", {
+          method: "POST",
+          body: JSON.stringify({ enabled: !currentlyOn }),
+        });
+        tenant = j.tenant;
+        await refreshTenant();
+        return j;
+      }, {
+        modalOk: {
+          title: currentlyOn ? "Đã dừng nhóm" : "Đã bật nhóm",
+          msg: (j) => j.message || "Xong.",
+        },
+      });
+    }
+
+    function bindGroupActions(root) {
+      if (!root) return;
+      root.querySelectorAll("[data-edit]").forEach((btn) => {
+        btn.onclick = () => openGroupEditor(btn.getAttribute("data-edit"));
+      });
+      root.querySelectorAll("[data-toggle]").forEach((btn) => {
+        btn.onclick = () => toggleGroup(btn.getAttribute("data-toggle"), btn.getAttribute("data-on") === "1");
+      });
+      root.querySelectorAll("[data-script]").forEach((btn) => {
+        btn.onclick = () => {
+          const id = btn.getAttribute("data-script");
+          showStep(2);
+          $("scriptGroup").value = id;
+          fillScriptFromGroup(id);
+          window.scrollTo({ top: $("s2").offsetTop - 20, behavior: "smooth" });
+        };
+      });
+      root.querySelectorAll("[data-del]").forEach((btn) => {
+        btn.onclick = () => deleteGroup(btn.getAttribute("data-del"));
+      });
+    }
+
+    function deleteGroup(id) {
+      const g = (tenant.groups || []).find((x) => x.id === id);
+      const name = (g && g.name) || "nhóm này";
+      if (!confirm("Xóa “" + name + "”? Không hoàn tác được.")) return;
+      return withBusy("Đang xóa nhóm…", async () => {
+        const j = await api("/tenant/groups/" + encodeURIComponent(id), { method: "DELETE" });
+        tenant = j.tenant;
+        $("groupEditor").classList.add("hidden");
+        await refreshTenant();
+        return j;
+      }, { modalOk: { title: "Đã xóa", msg: "Nhóm đã bị xóa." } });
+    }
+
+    function healthTag(g) {
+      const st = g.status || { code: g.enabled === false ? "paused" : (g.health || "unknown"), label: "" };
+      const code = st.code || "unknown";
+      if (code === "ok") return `<span class="tag ok">${st.label || "Đang ổn"}</span>`;
+      if (code === "paused") return `<span class="tag pause">${st.label || "Tạm dừng"}</span>`;
+      if (code === "banned" || code === "no_access" || code === "error")
+        return `<span class="tag bad">${st.label || "Lỗi"}</span>`;
+      return `<span class="tag unk">${st.label || "Chưa kiểm tra"}</span>`;
+    }
+
+    function renderOverview() {
+      const box = $("userOverview");
+      if (!box || role === "admin") return;
+      const maxG = (summary && summary.max_groups) || (license && license.max_groups) || 5;
+      const total = (summary && summary.total) || ((tenant && tenant.groups) || []).length;
+      const running = (summary && summary.running) || 0;
+      const problem = (summary && summary.problem) || 0;
+      $("overviewSub").textContent = summary && summary.at_limit
+        ? `Đã đủ ${maxG} nhóm theo gói — không thêm được nữa.`
+        : `Tối đa ${maxG} nhóm · Bật / dừng / sửa ngay tại đây.`;
+      $("overviewStats").innerHTML = `
+        <div class="stat"><div class="n">${running}</div><div class="l">Đang chạy</div></div>
+        <div class="stat"><div class="n">${total}/${maxG}</div><div class="l">Đã thêm / giới hạn</div></div>
+        <div class="stat"><div class="n">${problem}</div><div class="l">Nhóm có vấn đề</div></div>`;
+      const gs = (tenant && tenant.groups) || [];
+      const list = $("overviewList");
+      if (!gs.length) {
+        list.innerHTML = `<div class="hint">Chưa có nhóm — bấm “+ Nhóm ảo” hoặc “+ Nhóm thật”.</div>`;
+      } else {
+        list.innerHTML = gs.map((g) => {
+          const on = g.enabled !== false;
+          return `<div class="ov-row ${on ? "" : "off"}">
+            <div>
+              <div class="title">
+                <strong>${g.name || "Nhóm"}</strong>
+                <span class="tag ${g.is_virtual ? "ao" : "that"}">${g.is_virtual ? "ẢO" : "THẬT"}</span>
+                ${healthTag(g)}
+                <span class="tag ${on ? "ok" : "pause"}">${on ? "ĐANG CHẠY" : "ĐÃ DỪNG"}</span>
+              </div>
+              <div class="meta">
+                ID: ${g.group_id || "(chưa có)"}
+                · mỗi ${g.interval_minutes || 5} phút
+                · ${g.rounds_per_slot || 1} ván/lần
+                · ${g.start_time || "08:00"}–${g.end_time || "23:00"}
+                ${g.health_msg ? "<br/>" + g.health_msg : ""}
+              </div>
+            </div>
+            <div class="ov-actions">
+              <button type="button" class="${on ? "danger" : "accent"} sm" data-toggle="${g.id}" data-on="${on ? "1" : "0"}">${on ? "Dừng" : "Bật"}</button>
+              <button type="button" class="ghost sm" data-edit="${g.id}">Sửa</button>
+              <button type="button" class="ghost sm" data-script="${g.id}">Chọn tin</button>
+              <button type="button" class="danger sm" data-del="${g.id}">Xóa</button>
+            </div>
+          </div>`;
+        }).join("");
+        bindGroupActions(list);
+      }
+      const canAdd = !(summary && summary.at_limit);
+      if ($("btnAddAo")) $("btnAddAo").disabled = !canAdd;
+      if ($("btnAddThat")) $("btnAddThat").disabled = !canAdd;
+    }
+
+    function renderGroups() {
+      const gs = (tenant && tenant.groups) || [];
+      const opts = gs.map((g) => `<option value="${g.id}">${g.name} (${g.is_virtual ? "ảo" : "thật"})${g.enabled === false ? " — đã dừng" : ""}</option>`).join("");
+      if ($("scriptGroup")) $("scriptGroup").innerHTML = opts || "<option value=''>— thêm nhóm trước —</option>";
+      if (gs[0] && $("scriptGroup")) {
+        if (!$("scriptGroup").value) fillScriptFromGroup(gs[0].id);
+      }
+      renderOverview();
+    }
+
+    function openGroupEditor(id) {
+      const g = (tenant.groups || []).find((x) => x.id === id);
+      if (!g) return;
+      editingGroupId = id;
+      $("groupEditor").classList.remove("hidden");
+      $("geTitle").textContent = "Sửa: " + (g.name || id);
+      $("ge_id").value = g.id;
+      $("ge_name").value = g.name || "";
+      $("ge_group_id").value = g.group_id || "";
+      $("ge_virtual").value = g.is_virtual ? "true" : "false";
+      $("ge_bet").value = g.bet_amount_label || "1000";
+      $("ge_preview").value = g.send_table_preview ? "true" : "false";
+      $("ge_preview_gid").value = g.table_preview_group_id || "";
+      if ($("ge_interval")) $("ge_interval").value = String(g.interval_minutes || 5);
+      if ($("ge_rounds")) $("ge_rounds").value = String(g.rounds_per_slot || 1);
+      if ($("ge_start")) $("ge_start").value = g.start_time || "08:00";
+      if ($("ge_end")) $("ge_end").value = g.end_time || "23:00";
+      if ($("ge_continuous")) $("ge_continuous").value = g.continuous_mode ? "true" : "false";
+      if ($("ge_gap")) $("ge_gap").value = String(g.continuous_gap_sec || 2);
+      if ($("ge_crop")) $("ge_crop").value = g.result_crop_mode || (g.continuous_mode ? "bottom_right" : "");
+      if ($("ge_token_bot")) $("ge_token_bot").value = g.token_bot || "";
+      if ($("ge_content_style")) $("ge_content_style").value = g.content_style || "simple";
+      if ($("ge_gap_ladder")) $("ge_gap_ladder").value = g.gap_thep_ladder || "50,100,200,400,800";
+      if ($("ge_ho_template")) $("ge_ho_template").value = g.ho_template || "";
+      if ($("ge_cap_mode")) $("ge_cap_mode").value = g.outcome_caption_mode || "default";
+      if ($("ge_stamp")) $("ge_stamp").value = g.stamp_result_on_image ? "true" : "false";
+      if ($("ge_cap_win")) $("ge_cap_win").value = g.outcome_caption_win || "";
+      if ($("ge_cap_loss")) $("ge_cap_loss").value = g.outcome_caption_loss || "";
+      if ($("ge_cap_tie")) $("ge_cap_tie").value = g.outcome_caption_tie || "";
+      toggleBaoBan();
+      $("groupEditor").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    function renderLicense() {
+      if (!license) { $("licPill").innerHTML = role === "admin" ? "<strong>ADMIN</strong>" : "—"; return; }
+      $("licPill").innerHTML = `<strong>${license.label || "Gói"}</strong> · còn ${license.days_left} ngày · tối đa ${license.max_groups} nhóm`;
+    }
+
+    function toggleBaoBan() {
+      const v = $("ge_virtual").value === "true";
+      $("geBaoBan").classList.toggle("hidden", v);
+      $("slotAfterWrap").classList.toggle("hidden", v);
+    }
+
+    function chips(elId, arr, multi) {
+      const el = $(elId);
+      const a = Array.isArray(arr) ? arr : (arr == null || arr === "" ? [] : [arr]);
+      el.innerHTML = a.length
+        ? a.map((i) => `<span class="chip" data-i="${i}">Tin #${i} ✕</span>`).join("")
+        : `<span class="hint">Chưa chọn — bấm ô này rồi chọn tin bên trên</span>`;
+      el.querySelectorAll(".chip").forEach((c) => {
+        c.onclick = (e) => {
+          e.stopPropagation();
+          const i = Number(c.getAttribute("data-i"));
+          if (multi) {
+            const next = a.filter((x) => x !== i);
+            setSlot(elId, next);
+          } else setSlot(elId, []);
+          renderChipsAll();
+        };
+      });
+    }
+
+    function getSlotArr(elId) {
+      return [...$(elId).querySelectorAll(".chip")].map((c) => Number(c.getAttribute("data-i")));
+    }
+    function setSlot(elId, arr) {
+      $(elId).dataset.vals = JSON.stringify(arr);
+    }
+    function readSlot(elId) {
+      try { return JSON.parse($(elId).dataset.vals || "[]"); } catch { return []; }
+    }
+    function renderChipsAll() {
+      chips("slot_open", readSlot("slot_open"), true);
+      chips("slot_after", readSlot("slot_after"), true);
+      chips("slot_win", readSlot("slot_win").slice(0, 1), false);
+      chips("slot_loss", readSlot("slot_loss").slice(0, 1), false);
+      chips("slot_tie", readSlot("slot_tie").slice(0, 1), false);
+      chips("slot_end", readSlot("slot_end"), true);
+    }
+
+    function fillScriptFromGroup(gid) {
+      const g = (tenant.groups || []).find((x) => x.id === gid);
+      if (!g) return;
+      $("scriptGroup").value = gid;
+      setSlot("slot_open", g.open_msgs || []);
+      setSlot("slot_after", g.after_preview_msgs || []);
+      setSlot("slot_win", g.win_msg != null ? [g.win_msg] : []);
+      setSlot("slot_loss", g.loss_msg != null ? [g.loss_msg] : []);
+      setSlot("slot_tie", g.tie_msg != null ? [g.tie_msg] : []);
+      setSlot("slot_end", g.end_msgs || []);
+      $("slotAfterWrap").classList.toggle("hidden", !!g.is_virtual);
+      renderChipsAll();
+    }
+
+    function renderMsgs() {
+      $("msgGrid").innerHTML = messages.map((m) => `
+        <div class="msg" data-i="${m.index}">
+          <span class="idx">${Number(m.index) + 1}</span>${m.has_media ? "📎 " : ""}${(m.text || "(không chữ)").replace(/</g,"&lt;")}
+        </div>`).join("") || `<div class="hint">Chưa có tin — bấm “Tải tin mẫu”.</div>`;
+      $("msgGrid").querySelectorAll(".msg").forEach((el) => {
+        el.onclick = () => {
+          const i = Number(el.getAttribute("data-i"));
+          const map = { open: "slot_open", after: "slot_after", win: "slot_win", loss: "slot_loss", tie: "slot_tie", end: "slot_end" };
+          const elId = map[activeSlot];
+          let cur = readSlot(elId);
+          if (["win", "loss", "tie"].includes(activeSlot)) cur = [i];
+          else if (!cur.includes(i)) cur.push(i);
+          setSlot(elId, cur);
+          renderChipsAll();
+        };
+      });
+    }
+
+    async function refreshTenant() {
+      if (role === "admin") {
+        $("adminBox").classList.remove("hidden");
+        $("customerWizard").classList.add("hidden");
+        $("licPill").innerHTML = "<strong>ADMIN</strong>";
+        await loadLicenses();
+        return;
+      }
+      $("adminBox").classList.add("hidden");
+      $("customerWizard").classList.remove("hidden");
+      const j = await api("/tenant");
+      tenant = j.tenant;
+      license = j.license;
+      summary = j.summary || null;
+      $("display_name").value = tenant.display_name || "";
+      $("phone").value = tenant.phone || "";
+      $("api_id").value = tenant.api_id || "";
+      $("api_hash").value = tenant.api_hash || "";
+      $("twofa").value = tenant.twofa || "";
+      $("source_username").value = tenant.source_username || "frezeit";
+      renderLicense();
+      renderGroups();
+    }
+
+    function licStatusText(l) {
+      return l.status || (!l.enabled ? "đã tắt" : !l.activated_at ? "chưa dùng" : "đang dùng");
+    }
+
+    async function loadLicenses() {
+      const j = await api("/licenses");
+      const list = (j.licenses || []).slice().reverse();
+      const el = $("licList");
+      if (!list.length) {
+        el.innerHTML = `<div class="hint" style="color:#a8a29e">Chưa có mã — tạo mã ở trên.</div>`;
+        return;
+      }
+      el.innerHTML = list.map((l) => {
+        const on = l.enabled !== false;
+        const exp = l.expires_at ? new Date(l.expires_at).toLocaleDateString("vi-VN") : "chưa kích hoạt";
+        return `<div class="admin-lic" data-key="${l.key}">
+          <div class="row" style="justify-content:space-between;align-items:flex-start">
+            <div style="min-width:0">
+              <code style="color:${on ? "#5eead4" : "#a8a29e"};font-size:0.95rem">${l.key}</code>
+              <div class="hint" style="color:#a8a29e;margin-top:0.25rem;line-height:1.45">
+                ${l.note ? l.note + " · " : ""}${l.plan} · ${licStatusText(l)}
+                ${l.days_left != null ? " · còn " + l.days_left + " ngày" : ""} · hết ${exp}<br/>
+                Nhóm: <b style="color:#fafaf9">${l.groups_running || 0} chạy</b> / ${l.groups_total || 0} đã thêm
+                (max ${l.groups_limit || l.max_groups || "?"})
+                ${l.groups_problem ? " · " + l.groups_problem + " lỗi" : ""}
+                ${l.tenant_phone ? " · " + l.tenant_phone : ""}
+                ${l.at_limit ? " · <span style='color:#fbbf24'>đủ slot</span>" : ""}
+              </div>
+            </div>
+            <button type="button" class="ghost sm" data-copy="${l.key}" style="color:#e7e5e4;border-color:#44403c;background:#1c1917">Copy</button>
+          </div>
+          <div class="actions">
+            <input data-note="${l.key}" value="${(l.note || "").replace(/"/g, "&quot;")}" placeholder="Ghi chú" style="flex:1;min-width:100px" />
+            <input data-max="${l.key}" type="number" min="1" max="50" value="${l.max_groups || 5}" style="width:70px" title="Max nhóm" />
+            <select data-ext="${l.key}">
+              <option value="3">+3 ngày</option>
+              <option value="7" selected>+7 ngày</option>
+              <option value="30">+30 ngày</option>
+            </select>
+            <button type="button" class="sm" data-save="${l.key}">Lưu</button>
+            <button type="button" class="accent sm" data-extend="${l.key}">Gia hạn</button>
+            <button type="button" class="${on ? "danger" : "accent"} sm" data-toggle="${l.key}" data-on="${on ? "1" : "0"}">${on ? "Tắt" : "Bật"}</button>
+            <button type="button" class="danger sm" data-del="${l.key}">Xóa</button>
+          </div>
+        </div>`;
+      }).join("");
+
+      el.querySelectorAll("[data-copy]").forEach((btn) => {
+        btn.onclick = async () => {
+          const k = btn.getAttribute("data-copy");
+          try { await navigator.clipboard.writeText(k); toast("Đã copy " + k); }
+          catch { showModal(true, "Mã", k); }
+        };
+      });
+      el.querySelectorAll("[data-save]").forEach((btn) => {
+        btn.onclick = () => {
+          const k = btn.getAttribute("data-save");
+          const note = el.querySelector(`[data-note="${k}"]`)?.value || "";
+          const max_groups = Number(el.querySelector(`[data-max="${k}"]`)?.value || 5);
+          withBusy("Đang lưu mã…", async () => {
+            const j2 = await api("/licenses/" + encodeURIComponent(k), {
+              method: "PUT",
+              body: JSON.stringify({ note, max_groups }),
+            });
+            await loadLicenses();
+            return j2;
+          }, { modalOk: { title: "Đã lưu", msg: "Đã cập nhật ghi chú / số nhóm tối đa." } });
+        };
+      });
+      el.querySelectorAll("[data-extend]").forEach((btn) => {
+        btn.onclick = () => {
+          const k = btn.getAttribute("data-extend");
+          const days = Number(el.querySelector(`[data-ext="${k}"]`)?.value || 7);
+          withBusy("Đang gia hạn…", async () => {
+            const j2 = await api("/licenses/" + encodeURIComponent(k) + "/extend", {
+              method: "POST",
+              body: JSON.stringify({ days }),
+            });
+            await loadLicenses();
+            return j2;
+          }, { modalOk: { title: "Đã gia hạn", msg: (r) => r.message || "Xong." } });
+        };
+      });
+      el.querySelectorAll("[data-toggle]").forEach((btn) => {
+        btn.onclick = () => {
+          const k = btn.getAttribute("data-toggle");
+          const currentlyOn = btn.getAttribute("data-on") === "1";
+          withBusy(currentlyOn ? "Đang tắt mã…" : "Đang bật mã…", async () => {
+            const j2 = await api("/licenses/" + encodeURIComponent(k) + "/toggle", {
+              method: "POST",
+              body: JSON.stringify({ enabled: !currentlyOn }),
+            });
+            await loadLicenses();
+            return j2;
+          }, { modalOk: { title: currentlyOn ? "Đã tắt" : "Đã bật", msg: (r) => r.message || "Xong." } });
+        };
+      });
+      el.querySelectorAll("[data-del]").forEach((btn) => {
+        btn.onclick = () => {
+          const k = btn.getAttribute("data-del");
+          if (!confirm("Xóa mã " + k + "? Khách sẽ không vào được, nhóm dừng chạy.")) return;
+          withBusy("Đang xóa mã…", async () => {
+            const j2 = await api("/licenses/" + encodeURIComponent(k), { method: "DELETE" });
+            await loadLicenses();
+            return j2;
+          }, { modalOk: { title: "Đã xóa", msg: (r) => r.message || "Đã xóa mã." } });
+        };
+      });
+    }
+
+    async function saveTeleQuiet() {
+      const body = {
+        display_name: $("display_name").value.trim(),
+        phone: $("phone").value.trim(),
+        api_id: $("api_id").value.trim(),
+        api_hash: $("api_hash").value.trim(),
+        twofa: $("twofa").value,
+        source_username: $("source_username").value.trim() || "frezeit",
+        groups: (tenant && tenant.groups) || [],
+      };
+      const j = await api("/tenant", { method: "PUT", body: JSON.stringify(body) });
+      tenant = j.tenant; license = j.license || license;
+      renderLicense();
+      return j;
+    }
+
+    $("btnEnter").onclick = async () => {
+      $("gateErr").textContent = "";
+      try {
+        await withBusy("Đang đăng nhập…", async () => {
+          const key = $("loginKey").value.trim();
+          const r = await fetch(API + "/auth/login", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key }),
+          });
+          const j = await r.json();
+          if (!r.ok || !j.ok) throw new Error(j.error || "Sai mã");
+          token = j.token; role = j.role;
+          localStorage.setItem("pt", token); localStorage.setItem("pr", role);
+          license = j.license || null;
+          $("gate").classList.add("hidden");
+          $("app").classList.remove("hidden");
+          await refreshTenant();
+          showStep(1);
+          return j;
+        }, {
+          modalOk: {
+            title: "Đăng nhập thành công",
+            msg: (j) => j.role === "admin"
+              ? "Tạo mã rồi gửi cho khách nhé."
+              : "Làm lần lượt các bước rồi bật bot.",
+          },
+          modalFail: false,
+        });
+      } catch (e) {
+        $("gateErr").textContent = e.message;
+      }
+    };
+
+    $("btnLogout").onclick = () => logout(true);
+    document.querySelectorAll(".step").forEach((s) => s.onclick = () => showStep(Number(s.dataset.s)));
+
+    $("btnSaveTele").onclick = () => withBusy("Đang lưu…", () => saveTeleQuiet(), {
+      modalOk: { title: "Đã lưu", msg: "Thông tin đã được lưu." },
+    });
+
+    $("btnSendOtp").onclick = () => withBusy("Đang gửi mã xác nhận…", async () => {
+      await saveTeleQuiet();
+      return api("/login/start", { method: "POST", body: "{}" });
+    }, { modalOk: { title: "Đã gửi mã", msg: (j) => j.message || "Mở Telegram xem mã, nhập vào ô rồi bấm Xác nhận." } });
+
+    $("btnConfirmOtp").onclick = () => withBusy("Đang xác nhận…", async () => {
+      await api("/otp", { method: "POST", body: JSON.stringify({ code: $("otp").value.trim() }) });
+      if ($("twofa").value) await api("/2fa", { method: "POST", body: JSON.stringify({ password: $("twofa").value }) });
+    }, { modalOk: { title: "Xong", msg: "Đã xác nhận. Thêm nhóm ở khung Quản lý phía trên." } });
+
+    async function addGroup(isVirtual) {
+      if (summary && summary.at_limit) {
+        showModal(false, "Đã đủ nhóm", `Gói chỉ cho tối đa ${summary.max_groups} nhóm. Liên hệ gia hạn để thêm.`);
+        return;
+      }
+      await withBusy("Đang thêm nhóm…", async () => {
+        const j = await api("/tenant/groups", {
+          method: "POST",
+          body: JSON.stringify({
+            name: isVirtual ? "Nhóm ảo mới" : "Nhóm thật mới",
+            is_virtual: isVirtual,
+            send_table_preview: !isVirtual,
+          }),
+        });
+        tenant = j.tenant;
+        await refreshTenant();
+        openGroupEditor(j.group.id);
+        return j;
+      }, { modalOk: { title: "Đã thêm nhóm", msg: "Điền ID nhóm rồi bấm Lưu." } });
+    }
+    $("btnAddAo").onclick = () => addGroup(true);
+    $("btnAddThat").onclick = () => addGroup(false);
+    $("ge_virtual").onchange = toggleBaoBan;
+
+    $("btnCheckHealth").onclick = () => withBusy("Đang kiểm tra nhóm trên Telegram…", async () => {
+      const j = await api("/tenant/check-health", { method: "POST", body: "{}" });
+      tenant = j.tenant;
+      license = j.license || license;
+      summary = j.summary || summary;
+      renderLicense();
+      renderGroups();
+      return j;
+    }, { modalOk: { title: "Đã kiểm tra", msg: (j) => {
+      const bad = (j.summary && j.summary.problem) || 0;
+      return bad
+        ? `Có ${bad} nhóm đang lỗi / bị bay. Xem chi tiết ở Tổng quan.`
+        : "Các nhóm đang mở đều ổn.";
+    } } });
+
+    const planMax = { trial: 2, week: 3, month: 10 };
+    $("adminPlan").onchange = () => {
+      const p = $("adminPlan").value;
+      if (planMax[p] && $("adminMaxG")) $("adminMaxG").value = planMax[p];
+    };
+
+    $("btnMakeKey").onclick = () => withBusy("Đang tạo mã…", async () => {
+      const j = await api("/licenses", {
+        method: "POST",
+        body: JSON.stringify({
+          plan: $("adminPlan").value,
+          note: ($("adminNote").value || "").trim(),
+          max_groups: Number($("adminMaxG").value) || undefined,
+        }),
+      });
+      $("adminLog").textContent = `Mã gửi khách:\n${j.license.key}\n\n${j.preset?.label || j.license.plan} · ${j.license.days} ngày · tối đa ${j.license.max_groups} nhóm\nGhi chú: ${j.license.note || "(không)"}`;
+      $("adminNote").value = "";
+      await loadLicenses();
+      try { await navigator.clipboard.writeText(j.license.key); } catch (_) {}
+      return j;
+    }, { modalOk: { title: "Đã tạo mã", msg: (j) => `Mã ${j.license.key} — gửi cho khách.` } });
+
+    $("btnSaveGroup").onclick = () => withBusy("Đang lưu nhóm…", async () => {
+      const id = $("ge_id").value;
+      const body = {
+        name: $("ge_name").value.trim(),
+        group_id: $("ge_group_id").value.trim(),
+        is_virtual: $("ge_virtual").value === "true",
+        bet_amount_label: $("ge_bet").value.trim(),
+        send_table_preview: $("ge_preview").value === "true",
+        table_preview_group_id: $("ge_preview_gid").value.trim(),
+        interval_minutes: Number($("ge_interval")?.value || 5),
+        rounds_per_slot: Number($("ge_rounds")?.value || 1),
+        start_time: $("ge_start")?.value || "08:00",
+        end_time: $("ge_end")?.value || "23:00",
+        continuous_mode: $("ge_continuous")?.value === "true",
+        continuous_gap_sec: Number($("ge_gap")?.value || 2),
+        continuous_slim: true,
+        result_crop_mode: $("ge_crop")?.value || ($("ge_continuous")?.value === "true" ? "bottom_right" : ""),
+        result_crop_right_frac: 0.3,
+        result_crop_bottom_frac: 0.3,
+        result_crop_right_trim_frac: 0.035,
+        token_bot: ($("ge_token_bot")?.value || "").trim(),
+        content_style: $("ge_content_style")?.value || "simple",
+        gap_thep_ladder: ($("ge_gap_ladder")?.value || "50,100,200,400,800").trim(),
+        ho_template: ($("ge_ho_template")?.value || "").trim(),
+        outcome_caption_mode: $("ge_cap_mode")?.value || "default",
+        stamp_result_on_image: $("ge_stamp")?.value === "true",
+        outcome_caption_win: ($("ge_cap_win")?.value || "").trim(),
+        outcome_caption_loss: ($("ge_cap_loss")?.value || "").trim(),
+        outcome_caption_tie: ($("ge_cap_tie")?.value || "").trim(),
+      };
+      const j = await api("/tenant/groups/" + id, { method: "PUT", body: JSON.stringify(body) });
+      tenant = j.tenant;
+      $("groupEditor").classList.add("hidden");
+      await refreshTenant();
+      return j;
+    }, { modalOk: { title: "Đã lưu", msg: "Nhóm đã được cập nhật." } });
+
+    $("btnCancelGroup").onclick = () => $("groupEditor").classList.add("hidden");
+    $("btnDelGroup").onclick = () => deleteGroup($("ge_id").value);
+
+    document.querySelectorAll(".slot").forEach((s) => {
+      s.onclick = () => {
+        activeSlot = s.getAttribute("data-slot");
+        const labels = { open: "Tin mở đầu", after: "Sau ảnh bàn", win: "Khi thắng", loss: "Khi thua", tie: "Khi hòa", end: "Kết thúc" };
+        $("activeSlotLabel").textContent = labels[activeSlot] || activeSlot;
+      };
+    });
+
+    $("btnLoadMsgs").onclick = () => withBusy("Đang tải tin mẫu…", async () => {
+      const j = await api("/source/preview", { method: "POST", body: JSON.stringify({ limit: 12 }) });
+      messages = j.messages || [];
+      renderMsgs();
+      return j;
+    }, { modalOk: { title: "Đã tải tin", msg: (j) => "Có " + (j.messages || []).length + " tin. Bấm ô bên dưới rồi bấm tin để gắn." } });
+
+    $("scriptGroup").onchange = () => fillScriptFromGroup($("scriptGroup").value);
+    $("btnSaveScript").onclick = () => withBusy("Đang lưu…", async () => {
+      const id = $("scriptGroup").value;
+      if (!id) throw new Error("Chọn nhóm trước");
+      const body = {
+        open_msgs: readSlot("slot_open"),
+        after_preview_msgs: readSlot("slot_after"),
+        win_msg: readSlot("slot_win")[0],
+        loss_msg: readSlot("slot_loss")[0],
+        tie_msg: readSlot("slot_tie")[0],
+        end_msgs: readSlot("slot_end"),
+      };
+      const j = await api("/tenant/groups/" + id, { method: "PUT", body: JSON.stringify(body) });
+      tenant = j.tenant;
+      return j;
+    }, { modalOk: { title: "Đã lưu", msg: "Kịch bản tin đã được lưu." } });
+
+    $("btnGoLive").onclick = () => withBusy("Đang bật bot…", async () => {
+      return api("/tenant/go-live", { method: "POST", body: '{"run_now":true}' });
+    }, {
+      modalOk: { title: "Bot đã bật", msg: (j) => j.message || "Bot đang chạy." },
+    });
+    if ($("btnGoLiveTop")) {
+      $("btnGoLiveTop").onclick = () => $("btnGoLive").onclick();
+    }
+
+    $("btnReloadLic").onclick = () => withBusy("Đang tải…", () => loadLicenses(), {
+      modalOk: { title: "Xong", msg: "Danh sách đã cập nhật." },
+    });
+
+    $("btnStartFw").onclick = () => withBusy("Đang bật bot…", async () => {
+      await api("/sync", { method: "POST" });
+      const j = await api("/forward/start", { method: "POST", body: '{"run_now":true}' });
+      $("adminLog").textContent = "Bot đang chạy.";
+      return j;
+    }, { modalOk: { title: "Đã bật", msg: "Tất cả bot đang chạy." } });
+
+    $("btnStopFw").onclick = () => withBusy("Đang tắt bot…", async () => {
+      await api("/forward/stop", { method: "POST", body: "{}" });
+    }, { modalOk: { title: "Đã tắt", msg: "Tất cả bot đã dừng." } });
+
+    (async function boot() {
+      if (!token) return;
+      try {
+        const me = await api("/auth/me");
+        role = me.session.role;
+        license = me.license || null;
+        tenant = me.tenant || null;
+        $("gate").classList.add("hidden");
+        $("app").classList.remove("hidden");
+        if (role === "admin") {
+          await refreshTenant();
+        } else {
+          await refreshTenant();
+          renderLicense();
+          if (tenant) renderGroups();
+        }
+      } catch { logout(false); }
+    })();
+  </script>
+</body>
+</html>

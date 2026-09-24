@@ -22,6 +22,7 @@ const {
 const { sendTelegramMessage, requestData } = require("./utilities/request");
 const { connect } = require("./config/mongo");
 const router = require("./routers/index");
+const panelRoutes = require("./panel/routes");
 const { SESSION_LIST } = require("./config/predictResult.config");
 const { predictResultSchema } = require("./config/schema/index.schema");
 const { analyzeRoadProfile } = require("./utilities/roadAnalysis");
@@ -34,9 +35,15 @@ app.use(express.static("public"));
 const corsOptions = {
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Panel-Token"],
 };
 app.use(cors(corsOptions));
+// Sau reverse proxy (nginx/Cloudflare) — lấy IP/proto đúng khi gắn domain
+if (process.env.TRUST_PROXY === "1" || process.env.TRUST_PROXY === "true") {
+  app.set("trust proxy", 1);
+}
+app.use("/panel", express.static(path.join(__dirname, "panel", "public")));
+app.use("/panel", panelRoutes);
 connect();
 router(app);
 
@@ -982,9 +989,14 @@ setInterval(async () => {
   }
 }, POLL_INTERVAL_MS);
 
-server.listen(PORT, async () => {
+server.listen(Number(PORT), process.env.SERVER_BIND || "0.0.0.0", async () => {
+  const bind = process.env.SERVER_BIND || "0.0.0.0";
+  const pub = process.env.PANEL_PUBLIC_URL || `http://localhost:${PORT}/panel/`;
   await appendToLog(
-    `Running server http://localhost:${PORT}`,
+    `Running server http://${bind}:${PORT}`,
     process.env.LOGS_SERVER_SEXY
   );
+  console.log(`[SERVER] bind ${bind}:${PORT}`);
+  console.log(`[PANEL] local http://localhost:${PORT}/panel/`);
+  console.log(`[PANEL] public ${pub}`);
 });

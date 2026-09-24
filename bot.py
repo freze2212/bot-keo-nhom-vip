@@ -129,7 +129,7 @@ WIN_PROBABILITY = 0.70  # 70%
 LOSE_PROBABILITY = 0.30  # 30%
 
 sent_slots = set()
-# Luồng Tele tối giản: 1) báo bàn  2) hô Con/Cái  3) ảnh kết quả — chạy liên tục
+# Luồng Tele tối giản: 1) báo bàn  2) vision đặt  3) hô Con/Cái  4) ảnh kết quả nhanh — chạy liên tục
 
 TZ = timezone(timedelta(hours=7))  # GMT+7 (Việt Nam)
 SCHEDULE_INTERVAL = 5
@@ -1555,6 +1555,40 @@ def place_bet_api(table_name, bet_side, bet_amount=None):
         return None
 
 
+def wait_vision_bet_confirm(table_name, min_ho_at_ms, timeout_s=25, poll_s=0.15):
+    """Chờ vision BET_OK (notify-vision-bet) rồi mới hô Tele — không hô sớm theo API place."""
+    q_table = urllib.parse.quote(str(table_name))
+    ns = urllib.parse.quote(get_name_service())
+    deadline = time.time() + float(timeout_s)
+    last_err = None
+    while time.time() < deadline:
+        try:
+            path = (
+                f"/api/latest-vision-bet?tableName={q_table}"
+                f"&nameService={ns}&minHoAt={int(min_ho_at_ms)}&maxAgeMs=120000"
+            )
+            res = api_get_json(path, timeout=3)
+            if res and res.get("success") and res.get("data"):
+                data = res["data"]
+                side = str(data.get("betSide") or "").upper()
+                if side in ("B", "P"):
+                    print(
+                        f"[VISION BET OK] bàn {table_name} side={side} "
+                        f"hoAt={data.get('hoAt')} signal=#{data.get('signalId')}",
+                        flush=True,
+                    )
+                    return data
+        except Exception as e:
+            last_err = e
+        time.sleep(poll_s)
+    print(
+        f"[VISION BET TIMEOUT] {table_name} sau {timeout_s}s "
+        f"(minHoAt={min_ho_at_ms}) err={last_err}",
+        flush=True,
+    )
+    return None
+
+
 def request_force_signal_reload_api(name_service=None, reason="main_after_ho"):
     """Main 24/24: bấm Reload trên session Puppeteer sau khi hô."""
     try:
@@ -1660,6 +1694,9 @@ def log_tele(kind, content):
 
 async def send_result_image(group, result_type, caption, table_name=None, screenshot_data=None, jpeg_path=None):
     """Chỉ gửi ảnh THẬT (sexy_/screenshots). Không gửi mock."""
+    if (os.getenv('TELE_SEND') or '1').strip().lower() in ('0', 'false', 'no'):
+        print("[TELE ẢNH] TELE_SEND=0 — bỏ gửi ảnh (mirror forward lo)", flush=True)
+        return True
     send_path = None
     src_path = None
 
@@ -1675,6 +1712,17 @@ async def send_result_image(group, result_type, caption, table_name=None, screen
             print("[TELE ẢNH] BỎ QUA — chưa có ảnh thật (không gửi ảnh ảo)", flush=True)
             log_tele('ANH_SKIP', f'no real screenshot table={table_name} caption={caption}')
             return False
+        # 24/24: crop góc phải dưới chuẩn R30/B30/T3.5 trước khi nén gửi
+        crop_on = (os.getenv('RESULT_CROP_BOTTOM_RIGHT') or '1').strip().lower() not in (
+            '0', 'false', 'no',
+        )
+        if crop_on:
+            src_path = crop_result_bottom_right(
+                src_path,
+                right_frac=float(os.getenv('RESULT_CROP_RIGHT_FRAC') or 0.30),
+                bottom_frac=float(os.getenv('RESULT_CROP_BOTTOM_FRAC') or 0.30),
+                right_trim_frac=float(os.getenv('RESULT_CROP_RIGHT_TRIM_FRAC') or 0.035),
+            )
         send_path = compress_image_for_telegram(src_path) or src_path
 
     t0 = time.time()
@@ -1709,6 +1757,56 @@ async def send_result_image(group, result_type, caption, table_name=None, screen
         except OSError:
             pass
     return True
+
+
+def crop_result_bottom_right(
+    src_path,
+    right_frac=0.30,
+    bottom_frac=0.30,
+    right_trim_frac=0.035,
+):
+    """Crop góc phải-dưới (chuẩn R30/B30/T3.5) trước khi gửi Tele."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return src_path
+    if not src_path or not os.path.exists(src_path):
+        return src_path
+    rf = min(0.85, max(0.12, float(right_frac)))
+    bf = min(0.85, max(0.12, float(bottom_frac)))
+    rt = min(0.20, max(0.0, float(right_trim_frac)))
+    try:
+        img = Image.open(src_path).convert('RGB')
+        w, h = img.size
+        x0 = int(round(w * (1.0 - rf)))
+        y0 = int(round(h * (1.0 - bf)))
+        x1 = int(round(w * (1.0 - rt)))
+        x0 = max(0, min(x0, w - 16))
+        y0 = max(0, min(y0, h - 16))
+        x1 = max(x0 + 16, min(x1, w))
+        cropped = img.crop((x0, y0, x1, h))
+        out_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            'public',
+            'screenshots',
+            'result_crop',
+        )
+        os.makedirs(out_dir, exist_ok=True)
+        base = os.path.splitext(os.path.basename(src_path))[0]
+        dest = os.path.join(
+            out_dir,
+            f'{base}_brcrop_R{int(rf*100)}_B{int(bf*100)}_T{int(rt*100)}.png',
+        )
+        cropped.save(dest, 'PNG')
+        print(
+            f'[CROP 24/24] {os.path.basename(src_path)} → {os.path.basename(dest)} '
+            f'(R{int(rf*100)} B{int(bf*100)} T{int(rt*100)})',
+            flush=True,
+        )
+        return dest if os.path.exists(dest) else src_path
+    except Exception as e:
+        print(f'[CROP SKIP] {e}', flush=True)
+        return src_path
 
 
 def compress_image_for_telegram(image_path, max_width=1400, quality=85):
@@ -1764,7 +1862,7 @@ async def prepare_pending_image(pending, max_wait_seconds=8):
             table,
             min_stamp_time=min_stamp,
             max_wait_seconds=max_wait_seconds,
-            poll_s=0.25,
+            poll_s=0.12,
             expect_winner=expect_winner,
         )
         if data:
@@ -1784,6 +1882,19 @@ async def prepare_pending_image(pending, max_wait_seconds=8):
         pending['screenshot_data'] = None
         return pending
 
+    # Crop R30/B30/T3.5 trước khi nén — tránh gửi full rồi crop muộn
+    crop_on = (os.getenv('RESULT_CROP_BOTTOM_RIGHT') or '1').strip().lower() not in (
+        '0', 'false', 'no',
+    )
+    if crop_on:
+        src = await asyncio.to_thread(
+            crop_result_bottom_right,
+            src,
+            float(os.getenv('RESULT_CROP_RIGHT_FRAC') or 0.30),
+            float(os.getenv('RESULT_CROP_BOTTOM_FRAC') or 0.30),
+            float(os.getenv('RESULT_CROP_RIGHT_TRIM_FRAC') or 0.035),
+        )
+
     jpeg = await asyncio.to_thread(compress_image_for_telegram, src)
     if jpeg:
         pending['jpeg_path'] = jpeg
@@ -1797,6 +1908,10 @@ async def prepare_pending_image(pending, max_wait_seconds=8):
 
 async def send_ho_message(group, bet_msg):
     """Gửi tin hô tới mọi GROUP (Bot API) hoặc 1 nhóm (userbot)."""
+    if (os.getenv('TELE_SEND') or '1').strip().lower() in ('0', 'false', 'no'):
+        print("[BOT HÔ] TELE_SEND=0 — bỏ gửi Tele (main chỉ đặt + notify)", flush=True)
+        log_tele('HO_SKIP_TELE', bet_msg)
+        return group
     t0 = time.time()
     if TOKEN_BOT and HO_VIA_BOT:
         await asyncio.to_thread(bot_api_broadcast_text, bet_msg, 'HTML')
@@ -1816,6 +1931,9 @@ async def send_ho_message(group, bet_msg):
 
 
 async def send_announce_message(group, announce_msg):
+    if (os.getenv('TELE_SEND') or '1').strip().lower() in ('0', 'false', 'no'):
+        print("[BÁO BÀN] TELE_SEND=0 — bỏ gửi Tele", flush=True)
+        return group
     if TOKEN_BOT and HO_VIA_BOT:
         # Bot API: Markdown → HTML đơn giản cho ổn định
         html_msg = (
@@ -1840,10 +1958,11 @@ async def send_announce_message(group, announce_msg):
 
 
 async def flush_result_image_now(group, pending):
-    """API đã có kết quả → chờ ảnh new_round cùng winner → gửi (1 ảnh / 1 round)."""
+    """API đã có kết quả → chờ ảnh new_round cùng winner → gửi ngay (1 ảnh / 1 round)."""
     if not pending:
         return group
-    await prepare_pending_image(pending, max_wait_seconds=20)
+    # Poll nhanh: ảnh về là crop+nén+sendPhoto ngay
+    await prepare_pending_image(pending, max_wait_seconds=12)
     has_real = bool(pending.get('jpeg_path')) or is_real_screenshot_path(
         (pending.get('screenshot_data') or {}).get('filepath')
     )
@@ -2239,7 +2358,7 @@ async def daily_schedule(client, group):
         road_analysis_stamp = None
         last_road_log_at = 0.0
         print(
-            "[FLOW] 1 bot | vào bàn → HÔ RANDOM → đặt → FE B/P/T → ảnh",
+            "[FLOW] 1 bot | vào bàn → ĐẶT VISION → HÔ TELE → FE B/P/T → ảnh nhanh",
             flush=True,
         )
         print(
@@ -2486,13 +2605,53 @@ async def daily_schedule(client, group):
                 unit=current_stake,
             )
 
-            print(f"[FLOW] HÔ #{round_count} {label} (1 tin / round)...", flush=True)
+            # 24/24: Vision ĐẶT TRƯỚC → hô Tele sau (chỉ hô khi đặt OK)
             t_round = time.time()
             prev_api = globals().get('_last_api_result_at')
             gap_api = f" (cách API result trước +{t_round - prev_api:.1f}s)" if prev_api else ""
+            print(
+                f"[FLOW] ĐẶT #{round_count} {label} rồi hô Tele...",
+                flush=True,
+            )
+            log_timing(
+                'PLACE_BET_START',
+                f"#{round_count} {target_table} {label} Round={round_side}{gap_api}",
+                t_round,
+            )
+            place_at_ms = int(time.time() * 1000)
+            place_res = await asyncio.to_thread(
+                place_bet_api, target_table, side, current_stake
+            )
+            log_timing(
+                'PLACE_BET_API',
+                f"#{round_count} res={place_res}",
+                t_round,
+            )
+            if not place_res or not place_res.get('success'):
+                print(f"[PLACE BET WARN] {place_res} — KHÔNG hô, thử lại", flush=True)
+                last_ho_key = None
+                round_count = max(0, round_count - 1)
+                await asyncio.sleep(1)
+                continue
+
+            # API place chỉ emit socket — chờ vision click xong rồi hô ngay
+            vision_bet = await asyncio.to_thread(
+                wait_vision_bet_confirm, target_table, place_at_ms - 500, 25, 0.12
+            )
+            if not vision_bet:
+                print(
+                    f"[PLACE BET WARN] vision chưa BET_OK — KHÔNG hô Tele",
+                    flush=True,
+                )
+                last_ho_key = None
+                round_count = max(0, round_count - 1)
+                await asyncio.sleep(1)
+                continue
+            bet_start_time = time.time() * 1000
+
             log_timing(
                 'HO_START',
-                f"#{round_count} {target_table} {label} Round={round_side}{gap_api}",
+                f"#{round_count} {target_table} {label} sau vision BET_OK",
                 t_round,
             )
             group = await send_ho_message(group, bet_msg)
@@ -2506,31 +2665,6 @@ async def daily_schedule(client, group):
                 f"| prev={prev_result_text} lãi={format_profit_k(total_profit)}K",
                 flush=True,
             )
-
-            print("[FLOW] Place bet ngay sau hô...", flush=True)
-            log_timing('PLACE_BET_START', f"#{round_count} side={side}", t_round)
-            place_res = await asyncio.to_thread(
-                place_bet_api, target_table, side, current_stake
-            )
-            log_timing(
-                'PLACE_BET_API',
-                f"#{round_count} res={place_res}",
-                t_round,
-            )
-            await asyncio.to_thread(
-                notify_main_ho_api,
-                target_table,
-                side,
-                before_stamp,
-                round_count,
-            )
-            if not place_res or not place_res.get('success'):
-                print(f"[PLACE BET WARN] {place_res} — chờ rồi thử lại", flush=True)
-                last_ho_key = None
-                round_count = max(0, round_count - 1)
-                await asyncio.sleep(1)
-                continue
-            bet_start_time = time.time() * 1000
 
             print(
                 f"[FE SYNC] Đợi totalRound mới B/P/T cho {target_table} "

@@ -28,42 +28,42 @@
     "chrome_profile_dir": "chrome_user_data_vision",
     "chrome_boot_wait_sec": 12,
     "recover_no_window_sec": 25,
-    "recover_stale_sec": 180,
+    "recover_stale_sec": 60,
     "recover_cooldown_sec": 45,
     "settlement_threshold": 4.0,
     "settlement_min_dealing_ms": 800,
     "bet_verify_delay_sec": 0.25,
     "scroll_after_table": true,
-    "scroll_notches": -18,
-    "scroll_settle_sec": 1.2,
+    "scroll_notches": -11,
+    "scroll_settle_sec": 0.5,
     "review_capture_dir": "captures/run_20260915_1339",
     "dismiss_steps": [
         {
             "name": "close_thong_bao",
-            "x": 1542,
-            "y": 237,
+            "x": 1565,
+            "y": 215,
             "delay_after": 1.0
         }
     ],
     "login_points": {
         "open_login": {
-            "x": 1310,
-            "y": 136,
+            "x": 1360,
+            "y": 117,
             "delay_after": 1.5
         },
         "username": {
-            "x": 1069,
-            "y": 568,
+            "x": 1067,
+            "y": 548,
             "delay_after": 0.6
         },
         "password": {
-            "x": 1054,
-            "y": 621,
+            "x": 1175,
+            "y": 612,
             "delay_after": 0.5
         },
         "submit": {
-            "x": 1158,
-            "y": 799,
+            "x": 1171,
+            "y": 797,
             "delay_after": 6.0
         }
     },
@@ -126,37 +126,66 @@
     "navigation_steps": [
         {
             "name": "5. Click Casino/Sexy",
-            "x": 578,
-            "y": 215,
+            "x": 553,
+            "y": 210,
             "delay_after": 3.5
         },
         {
             "name": "6. Click vào phòng chọn bàn",
-            "x": 453,
-            "y": 268,
+            "x": 429,
+            "y": 257,
             "delay_after": 8.0
         },
         {
             "name": "7. Click chọn bàn (ngẫu nhiên)",
-            "x": 993,
-            "y": 537,
-            "delay_after": 5.0
+            "x": 447,
+            "y": 681,
+            "delay_after": 2.5,
+            "candidates": [
+                {
+                    "x": 447,
+                    "y": 681
+                },
+                {
+                    "x": 862,
+                    "y": 686
+                },
+                {
+                    "x": 1280,
+                    "y": 676
+                }
+            ]
         }
     ],
+    "table_click_candidates": [
+        {
+            "x": 447,
+            "y": 681
+        },
+        {
+            "x": 862,
+            "y": 686
+        },
+        {
+            "x": 1280,
+            "y": 676
+        }
+    ],
+    "random_table_click": true,
     "bet_points": {
         "player": {
-            "x": 1072,
-            "y": 915,
+            "x": 816,
+            "y": 921,
             "description": "Đặt CON"
         },
         "banker": {
-            "x": 1055,
-            "y": 915,
+            "x": 1089,
+            "y": 927,
             "description": "Đặt CÁI"
         },
         "confirm": {
-            "x": 1025,
-            "y": 981,
+            "x": 1043,
+            "y": 1004,
             "description": "Xác nhận cược"
         }
     },
@@ -175,7 +204,7 @@
         "sexy_change_min": 0.02,
         "lobby_std_min": 12.0,
         "lobby_color_min": 8.0,
-        "on_table_timeout_sec": 25,
+        "on_table_timeout_sec": 10,
         "page_timeout_sec": 20,
         "url_wait_sec": 6.0,
         "no_bet_recover_sec": 60
@@ -216,14 +245,14 @@
     "table_popup_dismiss_steps": [
         {
             "name": "close_tin_nhan_1",
-            "x": 1863,
-            "y": 1000,
+            "x": 1865,
+            "y": 994,
             "delay_after": 0.6
         },
         {
             "name": "close_tin_nhan_2",
-            "x": 808,
-            "y": 909,
+            "x": 1863,
+            "y": 997,
             "delay_after": 0.6
         }
     ],
@@ -252,8 +281,8 @@
         "height": 56
     },
     "scroll_focus": {
-        "x": 1751,
-        "y": 833
+        "x": 1749,
+        "y": 828
     },
-    "setup_recorded_at": "2026-09-23 18:48:17"
+    "setup_recorded_at": "2026-09-23 23:38:21"
 }

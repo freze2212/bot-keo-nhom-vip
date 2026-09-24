@@ -38,6 +38,80 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
 TZ = timezone(timedelta(hours=7))  # GMT+7 — dùng thống nhất cho log + lịch
 
 
+def _forward_token_bot(config=None):
+    """Chỉ dùng token gắn trên account — không lấy TOKEN_BOT global (tránh đụng nhóm thật/ảo)."""
+    raw = (config or {}).get("token_bot") or ""
+    return str(raw).strip().strip('"').strip("'")
+
+
+def bot_api_send_message(token, chat_id, text, parse_mode=None, timeout=45):
+    """Gửi text qua BotFather API (nhóm 24/24)."""
+    if not token or not chat_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": str(chat_id), "text": text or ""}
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": "application/json"}, method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        body = json.loads(resp.read().decode("utf-8"))
+    if not body.get("ok"):
+        raise RuntimeError(body.get("description") or str(body))
+    return True
+
+
+def bot_api_send_photo(token, chat_id, filepath, caption="", parse_mode=None, timeout=90):
+    """Gửi ảnh qua BotFather API."""
+    if not token or not chat_id or not filepath or not os.path.exists(filepath):
+        return False
+    import uuid
+
+    boundary = f"----CursorForm{uuid.uuid4().hex}"
+    parts = []
+
+    def add_field(name, value):
+        parts.append(
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="{name}"\r\n\r\n'
+            f"{value}\r\n".encode("utf-8")
+        )
+
+    add_field("chat_id", str(chat_id))
+    if caption:
+        add_field("caption", caption)
+    if parse_mode:
+        add_field("parse_mode", parse_mode)
+    filename = os.path.basename(filepath)
+    with open(filepath, "rb") as f:
+        file_bytes = f.read()
+    parts.append(
+        (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="photo"; filename="{filename}"\r\n'
+            f"Content-Type: application/octet-stream\r\n\r\n"
+        ).encode("utf-8")
+        + file_bytes
+        + b"\r\n"
+    )
+    parts.append(f"--{boundary}--\r\n".encode("utf-8"))
+    body = b"".join(parts)
+    url = f"https://api.telegram.org/bot{token}/sendPhoto"
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        res = json.loads(resp.read().decode("utf-8"))
+    if not res.get("ok"):
+        raise RuntimeError(res.get("description") or str(res))
+    return True
+
+
 def now_vn():
     return datetime.now(TZ)
 
@@ -220,6 +294,177 @@ def format_bet_for_config(config, bet_text):
     if uses_pnl_messages(config) or config.get('winloss_result'):
         return format_bet_text_with_amount(bet_text, label)
     return format_bet_text_legacy(bet_text, label)
+
+
+def parse_gap_thep_ladder(config):
+    raw = str((config or {}).get("gap_thep_ladder") or "50,100,200,400,800")
+    levels = []
+    for part in raw.replace(";", ",").split(","):
+        part = part.strip().upper().replace("K", "")
+        if not part:
+            continue
+        try:
+            levels.append(int(float(part)))
+        except ValueError:
+            continue
+    return levels or [50, 100, 200, 400, 800]
+
+
+def gap_thep_state_path(bot_id):
+    d = os.path.join(ROOT_DIR, "panel_data", "gap_thep")
+    os.makedirs(d, exist_ok=True)
+    safe = re.sub(r"[^\w\-]+", "_", str(bot_id or "bot"))
+    return os.path.join(d, f"{safe}.json")
+
+
+def load_gap_thep_state(bot_id):
+    path = gap_thep_state_path(bot_id)
+    today = datetime.now(TZ).strftime("%Y-%m-%d")
+    default = {
+        "day": today,
+        "level": 0,
+        "total_profit": 0.0,
+        "prev_result": "—",
+    }
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+            if str(data.get("day") or "") != today:
+                default["day"] = today
+                return default
+            default.update({
+                "day": today,
+                "level": int(data.get("level") or 0),
+                "total_profit": float(data.get("total_profit") or 0),
+                "prev_result": str(data.get("prev_result") or "—"),
+            })
+    except Exception:
+        pass
+    return default
+
+
+def save_gap_thep_state(bot_id, state):
+    path = gap_thep_state_path(bot_id)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log(f"[GAP THEP] Lỗi ghi state {bot_id}: {e}")
+
+
+def current_gap_thep_stake(config, bot_id):
+    levels = parse_gap_thep_ladder(config)
+    st = load_gap_thep_state(bot_id)
+    idx = max(0, min(int(st.get("level") or 0), len(levels) - 1))
+    return levels[idx], st, levels
+
+
+def apply_gap_thep_result(config, bot_id, outcome_key, stake):
+    """Cập nhật bậc + tổng lãi sau ván (WIN reset, LOSS lên bậc, TIE giữ)."""
+    levels = parse_gap_thep_ladder(config)
+    st = load_gap_thep_state(bot_id)
+    key = str(outcome_key or "").upper()
+    stake_n = float(stake or 0)
+    if key == "WIN":
+        st["total_profit"] = float(st.get("total_profit") or 0) + stake_n
+        st["level"] = 0
+        st["prev_result"] = "🟢 THẮNG"
+    elif key == "LOSS":
+        st["total_profit"] = float(st.get("total_profit") or 0) - stake_n
+        st["level"] = min(int(st.get("level") or 0) + 1, len(levels) - 1)
+        st["prev_result"] = "🔴 THUA"
+    else:
+        st["prev_result"] = "⚖️ HÒA"
+    st["day"] = datetime.now(TZ).strftime("%Y-%m-%d")
+    save_gap_thep_state(bot_id, st)
+    return st
+
+
+def _content_vars(bet_side, stake, table, profit=0, prev_result="—"):
+    side = "B" if str(bet_side).upper().startswith("B") else "P"
+    return {
+        "side": side,
+        "side_emoji": "🔴" if side == "B" else "🔵",
+        "side_label": "CÁI" if side == "B" else "CON",
+        "stake": str(int(stake) if float(stake) == int(float(stake)) else stake),
+        "table": str(table or ""),
+        "profit": str(int(profit) if float(profit) == int(float(profit)) else profit),
+        "prev_result": str(prev_result or "—"),
+    }
+
+
+def render_content_template(template, variables):
+    text = str(template or "")
+    if not text.strip():
+        return ""
+    for k, v in (variables or {}).items():
+        text = text.replace("{" + k + "}", str(v))
+    return text.strip()
+
+
+def build_ho_text_for_config(config, bet_side, bot_id=None, table_name=None):
+    """
+    Hô theo content_style từng nhóm:
+    - simple: CON/CÁI + mức (cũ)
+    - template / gap_thep: dùng ho_template
+    """
+    style = str((config or {}).get("content_style") or "simple").strip().lower()
+    bet_text_base = "🔵 CON" if str(bet_side).upper().startswith("P") else "🔴 CÁI"
+    if style in ("gap_thep", "gap", "martingale"):
+        stake, st, _levels = current_gap_thep_stake(config, bot_id)
+        tpl = (config or {}).get("ho_template") or ""
+        if tpl.strip():
+            vars_ = _content_vars(
+                bet_side,
+                stake,
+                table_name,
+                profit=st.get("total_profit") or 0,
+                prev_result=st.get("prev_result") or "—",
+            )
+            return render_content_template(tpl, vars_), stake, True
+        # fallback ngắn nếu chưa dán template
+        text = format_bet_text_with_amount(bet_text_base, stake)
+        return text, stake, True
+    if style == "template":
+        stake = parse_bet_amount_numeric((config or {}).get("bet_amount_label")) or 50
+        tpl = (config or {}).get("ho_template") or ""
+        if tpl.strip():
+            st = load_gap_thep_state(bot_id) if bot_id else {}
+            vars_ = _content_vars(
+                bet_side,
+                stake,
+                table_name,
+                profit=st.get("total_profit") or 0,
+                prev_result=st.get("prev_result") or "—",
+            )
+            return render_content_template(tpl, vars_), stake, True
+    text = format_bet_for_config(config, bet_text_base)
+    stake = parse_bet_amount_numeric((config or {}).get("bet_amount_label")) or 0
+    return text, stake, bool("<" in text)
+
+
+def build_outcome_caption_for_config(config, outcome_key, stake=None):
+    mode = str((config or {}).get("outcome_caption_mode") or "default").strip().lower()
+    if mode in ("none", "off", "0", "false"):
+        return None
+    stake_n = stake
+    if stake_n is None:
+        stake_n = parse_bet_amount_numeric((config or {}).get("bet_amount_label")) or 1000
+    key = str(outcome_key or "").upper()
+    if mode == "template":
+        if key == "WIN":
+            tpl = (config or {}).get("outcome_caption_win") or "THẮNG +{stake}"
+        elif key == "LOSS":
+            tpl = (config or {}).get("outcome_caption_loss") or "THUA -{stake}"
+        else:
+            tpl = (config or {}).get("outcome_caption_tie") or "HÒA 0"
+        return render_content_template(
+            tpl,
+            _content_vars("P", stake_n, "", profit=0, prev_result=""),
+        )
+    return build_outcome_caption(outcome_key, stake_n)
+
 
 def build_winloss_result_text(bet_amount_label, norm_winner=None, norm_bet=None, outcome=None):
     """Tin Thắng/Thua/Hòa có icon — chỉ nhóm bật winloss_result (bot 7/8)."""
@@ -916,6 +1161,84 @@ def crop_image_left_frac(src_path, left_frac=0.30, out_dir=None, tag="vcrop"):
     except Exception as ex:
         log(f"[VIRTUAL CROP] lỗi: {ex}")
         return src_path
+
+
+def crop_image_bottom_right(
+    src_path,
+    right_frac=0.32,
+    bottom_frac=0.40,
+    right_trim_frac=0.0,
+    out_dir=None,
+    tag="brcrop",
+):
+    """
+    Giữ góc phải-dưới ảnh (kết quả/toast) — cắt bỏ phần trái + trên.
+    right_frac = phần chiều ngang giữ bên phải (0.25–0.45).
+    bottom_frac = phần chiều dọc giữ phía dưới.
+    right_trim_frac = cắt thêm mép phải (khoảng đen UI), tính theo % chiều ngang ảnh gốc.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return src_path
+    if not src_path or not os.path.exists(src_path):
+        return src_path
+    rf = min(0.85, max(0.12, float(right_frac or 0.32)))
+    bf = min(0.85, max(0.12, float(bottom_frac or 0.40)))
+    rt = min(0.20, max(0.0, float(right_trim_frac or 0.0)))
+    try:
+        img = Image.open(src_path).convert("RGB")
+        w, h = img.size
+        x0 = int(round(w * (1.0 - rf)))
+        y0 = int(round(h * (1.0 - bf)))
+        x1 = int(round(w * (1.0 - rt)))
+        x0 = max(0, min(x0, w - 16))
+        y0 = max(0, min(y0, h - 16))
+        x1 = max(x0 + 16, min(x1, w))
+        cropped = img.crop((x0, y0, x1, h))
+        dest_dir = out_dir or os.path.join(SCREENSHOT_DIR, "result_crop")
+        os.makedirs(dest_dir, exist_ok=True)
+        base = os.path.splitext(os.path.basename(src_path))[0]
+        dest = os.path.join(
+            dest_dir,
+            f"{base}_{tag}_R{int(rf * 100)}_B{int(bf * 100)}"
+            + (f"_T{int(rt * 100)}" if rt > 0 else "")
+            + ".png",
+        )
+        cropped.save(dest, "PNG")
+        return dest if os.path.exists(dest) else src_path
+    except Exception as ex:
+        log(f"[RESULT CROP] lỗi: {ex}")
+        return src_path
+
+
+def apply_result_image_crop(config, src_path, is_virtual=False):
+    """Áp crop theo result_crop_mode: bottom_right | left | none."""
+    mode = str(config.get("result_crop_mode") or "").strip().lower()
+    if not mode:
+        if config.get("continuous_mode"):
+            mode = "bottom_right"
+        elif is_virtual:
+            mode = "left"
+        else:
+            mode = "none"
+    if mode in ("none", "off", "0", "false"):
+        return src_path
+    if mode in ("bottom_right", "br", "right_bottom", "corner"):
+        rf = float(config.get("result_crop_right_frac") or 0.30)
+        bf = float(config.get("result_crop_bottom_frac") or 0.30)
+        rt = float(config.get("result_crop_right_trim_frac") or 0.035)
+        return crop_image_bottom_right(
+            src_path, right_frac=rf, bottom_frac=bf, right_trim_frac=rt
+        )
+    if mode in ("left", "virtual_left"):
+        vfrac = float(
+            config.get("result_crop_left_frac")
+            or config.get("virtual_crop_left_frac")
+            or 0.30
+        )
+        return crop_image_left_frac(src_path, left_frac=vfrac)
+    return src_path
 
 
 def stamp_outcome_on_image(src_path, outcome, bet_amount_label, out_dir=None):
@@ -1993,6 +2316,7 @@ class TelegramForwardBot:
         self.bet_amount_label = str(config.get('bet_amount_label', '10%')).strip()
         self.last_used_table = None
         self.is_running_round = False
+        self.is_running_slot = False
         self.pending_slots = []
         cfg_ns = str(config.get('name_service') or '').strip().upper()
         if cfg_ns:
@@ -2013,6 +2337,38 @@ class TelegramForwardBot:
         self.client = None
         self.dialog_cache = {}
         self.current_slot_key = None
+        self.token_bot = _forward_token_bot(config)
+
+    def uses_bot_api_send(self):
+        """Gửi vào group_id bằng BotFather khi có token_bot (24/24)."""
+        return bool(self.token_bot and self.group_id)
+
+    async def tg_send_text(self, entity, txt, parse_mode=None):
+        if self.uses_bot_api_send():
+            await asyncio.to_thread(
+                bot_api_send_message,
+                self.token_bot,
+                self.group_id,
+                txt,
+                parse_mode,
+            )
+            return
+        await self.client.send_message(entity, txt, parse_mode=parse_mode)
+
+    async def tg_send_file(self, entity, filepath, caption=None, parse_mode=None):
+        if self.uses_bot_api_send():
+            await asyncio.to_thread(
+                bot_api_send_photo,
+                self.token_bot,
+                self.group_id,
+                filepath,
+                caption or "",
+                parse_mode,
+            )
+            return
+        await self.client.send_file(
+            entity, filepath, caption=caption or None, parse_mode=parse_mode
+        )
 
     def audit(self, action):
         return
@@ -2266,6 +2622,35 @@ class TelegramForwardBot:
         # Không có nhóm riêng: gửi vào đúng nhóm ca (thật)
         return str(self.group_id).strip() if self.group_id else None
 
+    async def _announce_table_change_24(self, send_text):
+        """24/24: tin báo bàn / đổi bàn khi vision đổi Cxx (không chờ opening dài)."""
+        prev = getattr(self, "_announced_table_24", None)
+        cur = str(self.session_table or "").strip().upper()
+        if not cur or cur in ("NONE", "LOBBY"):
+            return
+        if prev == cur:
+            return
+        if prev is None:
+            msg = (
+                f"🎰 <b>BÁO BÀN: {cur}</b>\n"
+                f"AE vào đúng bàn <b>{cur}</b> theo lệnh.\n"
+                f"--------»-----★--—-«--------"
+            )
+            label = f"[24/24 BÁO BÀN] lần đầu → {cur}"
+        else:
+            msg = (
+                f"🔄 <b>ĐỔI BÀN: {prev} → {cur}</b>\n"
+                f"AE chuyển sang bàn <b>{cur}</b>.\n"
+                f"--------»-----★--—-«--------"
+            )
+            label = f"[24/24 ĐỔI BÀN] {prev} → {cur}"
+        self._announced_table_24 = cur
+        self.last_used_table = cur
+        try:
+            await send_text(msg, label, parse_mode="html")
+        except Exception as ex:
+            self.log(f"[24/24 BÁO/ĐỔI BÀN ERROR] {ex}")
+
     async def _forward_order(self, forward_idx, order, delays, label_prefix, default_delay=20):
         order = order or []
         delays = delays or []
@@ -2286,14 +2671,14 @@ class TelegramForwardBot:
             return False
         try:
             self.log(f"Gửi ảnh báo bàn: {os.path.basename(preview_shot)}")
-            await self.client.send_file(entity, preview_shot, caption=caption or None)
+            await self.tg_send_file(entity, preview_shot, caption=caption or None)
             self.audit("Ảnh báo bàn")
             return True
         except Exception as ex:
             self.log(f"[LỖI GỬI ẢNH BÁO BÀN]: {ex}")
             if caption:
                 try:
-                    await self.client.send_message(entity, caption)
+                    await self.tg_send_text(entity, caption)
                 except Exception:
                     pass
             return False
@@ -2306,20 +2691,30 @@ class TelegramForwardBot:
         """
         step = config_step_delay(self.config, 20)
         is_virtual = bool(self.config.get("is_virtual"))
+        continuous = bool(self.config.get("continuous_mode"))
+        slim = continuous and self.config.get("continuous_slim", True)
         self.sync_session_table_from_vision()
         self.log(
             f"BẮT ĐẦU PHIÊN PRIOR-ROUND "
             f"({'ẢO' if is_virtual else 'THẬT'} | cược {self.bet_amount_label} "
-            f"| bàn {self.session_table})"
+            f"| bàn {self.session_table}"
+            f"{' | 24/24' if continuous else ''})"
         )
 
-        await self._forward_order(
-            forward_idx,
-            self.config.get("opening_order", [0, 1]),
-            self.config.get("opening_delays", [step, step]),
-            "Tin mở đầu",
-            step,
-        )
+        if not slim:
+            await self._forward_order(
+                forward_idx,
+                self.config.get("opening_order", [0, 1]),
+                self.config.get("opening_delays", [step, step]),
+                "Tin mở đầu",
+                step,
+            )
+        else:
+            self.log("[24/24] Bỏ tin mở đầu — hô liên tục")
+
+        # 24/24 slim: vẫn báo bàn lần đầu / ĐỔI BÀN khi vision đổi bàn (text nhanh)
+        if slim and not is_virtual:
+            await self._announce_table_change_24(send_text)
 
         preview_shot = None
         shots = list_main_shots_for_table(self.session_table)
@@ -2332,8 +2727,8 @@ class TelegramForwardBot:
         if is_virtual:
             self.log("[ẢO] Chờ bước hô — random WIN/LOSS/TIE + lấy LAST_* tương ứng")
 
-        # Báo bàn: CHỈ nhóm THẬT theo ca; có table_preview_group_id → gửi nhóm riêng
-        if self.should_send_table_preview():
+        # Báo bàn: CHỈ nhóm THẬT theo ca; 24/24 slim thì bỏ (chỉ hô + ảnh KQ crop)
+        if self.should_send_table_preview() and not slim:
             self.sync_session_table_from_vision()
             before_m = time.time() - 0.5
             self.log(f"[BÁO BÀN] Request capture live bàn {self.session_table}...")
@@ -2381,13 +2776,14 @@ class TelegramForwardBot:
         elif is_virtual:
             self.log("[BÁO BÀN] Bỏ qua — nhóm ảo không báo bàn")
 
-        await self._forward_order(
-            forward_idx,
-            self.config.get("opening_after_preview", [2]),
-            self.config.get("opening_after_preview_delays", [step]),
-            "Tin sau báo bàn",
-            step,
-        )
+        if not slim:
+            await self._forward_order(
+                forward_idx,
+                self.config.get("opening_after_preview", [2]),
+                self.config.get("opening_after_preview_delays", [step]),
+                "Tin sau báo bàn",
+                step,
+            )
 
         # --- HÔ + ẢNH KẾT QUẢ ---
         # THẬT: hô theo vision → chỉ gửi capture mtime > sau hô (CURRENT).
@@ -2427,14 +2823,26 @@ class TelegramForwardBot:
         else:
             # THẬT: nghỉ → lắng nghe cửa vision
             if ho_mode == "match_vision":
-                ho_pre_wait = int(self.config.get("ho_pre_wait_sec") or step or 20)
+                raw_pre = self.config.get("ho_pre_wait_sec")
+                if raw_pre is None:
+                    ho_pre_wait = int(step or 20)
+                else:
+                    try:
+                        ho_pre_wait = max(0, int(raw_pre))
+                    except (TypeError, ValueError):
+                        ho_pre_wait = int(step or 20)
                 ho_listen_timeout = int(self.config.get("ho_listen_timeout_sec") or 90)
-                listen_from_ms = int(time.time() * 1000)
+                # continuous: trừ buffer — báo/đổi bàn + network không làm miss BET_OK vừa rồi
+                if continuous:
+                    listen_from_ms = int(time.time() * 1000) - 8000
+                else:
+                    listen_from_ms = int(time.time() * 1000)
                 self.log(
                     f"[HÔ] Nghỉ tối thiểu {ho_pre_wait}s rồi lắng nghe cửa vision "
                     f"(timeout {ho_listen_timeout}s)..."
                 )
-                await asyncio.sleep(ho_pre_wait)
+                if ho_pre_wait > 0:
+                    await asyncio.sleep(ho_pre_wait)
                 deadline = time.time() + ho_listen_timeout
                 while time.time() < deadline:
                     bet_side = fetch_latest_vision_bet(
@@ -2451,13 +2859,28 @@ class TelegramForwardBot:
             if not bet_side and ho_mode == "match_shot" and new_win in ("B", "P"):
                 bet_side = new_win
             if not bet_side:
+                # 24/24 continuous: không hô bừa khi vision chưa đặt.
+                # VIP thật (không continuous): giữ fallback random như cũ.
+                if ho_mode == "match_vision" and continuous:
+                    self.log(
+                        "[HÔ] SKIP 24/24 — chưa có cửa vision mới — không hô random"
+                    )
+                    return
                 bet_side = random.choice(["B", "P"])
-                if ho_mode == "match_vision":
-                    self.log(f"[HÔ] Fallback random {bet_side}")
+                self.log(f"[HÔ] Fallback random {bet_side}")
 
-        bet_text_base = "🔵 CON" if bet_side == "P" else "🔴 CÁI"
-        bet_text_to_send = format_bet_for_config(self.config, bet_text_base)
-        await send_text(bet_text_to_send, f"Đã gửi tin HÔ {bet_text_to_send}")
+        bet_text_to_send, round_stake, ho_html = build_ho_text_for_config(
+            self.config,
+            bet_side,
+            bot_id=self.bot_id,
+            table_name=self.session_table,
+        )
+        self._round_stake = round_stake
+        await send_text(
+            bet_text_to_send,
+            f"Đã gửi tin HÔ {bet_text_to_send[:80]}",
+            parse_mode="html" if ho_html or uses_html_messages(self.config) else None,
+        )
         after_ho_mtime = time.time()
         # Không sleep step_delay (20s) sau hô — chỉ nghỉ ngắn rồi poll ảnh ngay
         post_ho = float(self.config.get("post_ho_wait_sec") or 0.8)
@@ -2550,36 +2973,57 @@ class TelegramForwardBot:
         send_path = result_shot
         result_caption = None
         if result_shot and os.path.exists(result_shot) and outcome_key:
-            # ẢO: cắt thêm % bên trái trước khi gửi (che roadmap / lệch frame)
-            if is_virtual:
-                vfrac = float(self.config.get("virtual_crop_left_frac") or 0.30)
-                if vfrac > 0:
-                    cropped = crop_image_left_frac(result_shot, left_frac=vfrac)
-                    if cropped and cropped != result_shot:
-                        self.log(
-                            f"[ẢO] Crop trái {int(vfrac * 100)}% → {os.path.basename(cropped)}"
-                        )
-                        send_path = cropped
+            cropped = apply_result_image_crop(self.config, result_shot, is_virtual=is_virtual)
+            if cropped and cropped != result_shot:
+                mode = str(
+                    self.config.get("result_crop_mode")
+                    or (
+                        "bottom_right"
+                        if self.config.get("continuous_mode")
+                        else ("left" if is_virtual else "none")
+                    )
+                )
+                self.log(f"[CROP] {mode} → {os.path.basename(cropped)}")
+                send_path = cropped
             use_stamp = bool(self.config.get("stamp_result_on_image", True))
             if use_stamp:
                 send_path = stamp_outcome_on_image(
                     send_path, outcome_key, self.bet_amount_label
                 )
             else:
-                result_caption = build_outcome_caption(outcome_key, self.bet_amount_label)
+                result_caption = build_outcome_caption_for_config(
+                    self.config,
+                    outcome_key,
+                    stake=getattr(self, "_round_stake", None),
+                )
+
+            # Gấp thếp: cập nhật bậc sau khi biết outcome (trước khi gửi cũng OK)
+            style = str(self.config.get("content_style") or "").lower()
+            if style in ("gap_thep", "gap", "martingale"):
+                apply_gap_thep_result(
+                    self.config,
+                    self.bot_id,
+                    outcome_key,
+                    getattr(self, "_round_stake", 0) or 0,
+                )
 
             try:
+                t_send0 = time.time()
                 self.log(
                     f"Gửi ảnh kết quả ({outcome_key}): {os.path.basename(send_path)} "
                     f"(hô={bet_side} winner ảnh={result_win}"
                     f"{f' caption={result_caption}' if result_caption else ''})"
                 )
-                await self.client.send_file(
+                await self.tg_send_file(
                     entity, send_path, caption=result_caption or None
                 )
                 self.audit(
                     f"Ảnh kết quả {outcome_key}"
                     + (f" + caption" if result_caption else " stamped")
+                )
+                self.log(
+                    f"[TIMING] ảnh KQ gửi xong +{time.time() - after_ho_mtime:.1f}s "
+                    f"sau hô (upload {time.time() - t_send0:.1f}s)"
                 )
             except Exception as ex:
                 self.log(f"[LỖI GỬI ẢNH KẾT QUẢ]: {ex}")
@@ -2588,24 +3032,29 @@ class TelegramForwardBot:
             if not outcome_key:
                 outcome_key = "TIE"
 
-        await asyncio.sleep(step)
+        await asyncio.sleep(0.15 if slim else step)
 
         if not self.config.get("result_via_source_messages"):
             if not result_caption:
                 result_text = build_virtual_result_for_config(self.config, outcome_key)
                 await send_text(result_text, f"Tin kết quả text ({outcome_key})")
-                await asyncio.sleep(step)
+                await asyncio.sleep(0.15 if slim else step)
 
-        if self.config.get("outcome_message_map"):
-            await send_post_result_endings(self.config, forward_idx, outcome_key)
+        if not slim:
+            if self.config.get("outcome_message_map"):
+                await send_post_result_endings(self.config, forward_idx, outcome_key)
+            else:
+                await self._forward_order(
+                    forward_idx,
+                    self.config.get("ending_order", [4]),
+                    self.config.get("ending_delays", [step]),
+                    "Tin kết thúc",
+                    step,
+                )
         else:
-            await self._forward_order(
-                forward_idx,
-                self.config.get("ending_order", [4]),
-                self.config.get("ending_delays", [step]),
-                "Tin kết thúc",
-                step,
-            )
+            # 24/24: chỉ gửi tin WIN/LOSS/TIE ngắn nếu có map, bỏ ending dài
+            if self.config.get("outcome_message_map"):
+                await send_post_result_endings(self.config, forward_idx, outcome_key)
 
         self.log(
             f"HOÀN THÀNH CA PRIOR-ROUND ({'ẢO' if is_virtual else 'THẬT'}) "
@@ -2624,8 +3073,15 @@ class TelegramForwardBot:
         await self.ensure_connected()
         entity = await self.resolve_entity(self.group_id)
         if not entity:
-            self.log(f"[ERROR] Không tìm thấy nhóm ID={self.group_id}")
-            return
+            if self.uses_bot_api_send():
+                # BotFather gửi bằng chat_id — userbot không cần là member nhóm
+                entity = self.group_id
+                self.log(
+                    f"[BOT API] chat_id={self.group_id} — bỏ qua resolve userbot"
+                )
+            else:
+                self.log(f"[ERROR] Không tìm thấy nhóm ID={self.group_id}")
+                return
 
         self.is_running_round = True
         try:
@@ -2689,13 +3145,14 @@ class TelegramForwardBot:
             async def send_text(txt, label, parse_mode=None):
                 try:
                     await self.ensure_connected()
-                    await self.client.send_message(entity, txt, parse_mode=parse_mode)
+                    await self.tg_send_text(entity, txt, parse_mode=parse_mode)
                     self.audit(label)
-                    self.log(f"{label}: {txt}")
+                    via = "BotAPI" if self.uses_bot_api_send() else "userbot"
+                    self.log(f"{label} [{via}]: {txt}")
                 except FloodWaitError as fe:
                     await asyncio.sleep(fe.seconds + 1)
                     await self.ensure_connected()
-                    await self.client.send_message(entity, txt, parse_mode=parse_mode)
+                    await self.tg_send_text(entity, txt, parse_mode=parse_mode)
                 except Exception as ex:
                     self.log(f"[LỖI SEND TEXT]: {ex}")
 
@@ -3108,7 +3565,7 @@ async def sleep_until_minute_boundary():
 
 
 async def launch_bot_round(bot, all_bots, slot_key):
-    """Lấy tin nguồn rồi chạy 1 ca. Trả True nếu đã create_task execute_round."""
+    """Lấy tin nguồn rồi chạy 1 ca (có thể nhiều round / slot). Trả True nếu đã create_task."""
     bot.current_slot_key = slot_key
     try:
         await bot.ensure_connected()
@@ -3131,16 +3588,80 @@ async def launch_bot_round(bot, all_bots, slot_key):
             b.session_table for b in all_bots
             if b != bot and b.is_running_round and b.session_table
         ]
-        asyncio.create_task(
-            bot.execute_round(messages, exclude_tables=other_tables)
-        )
+        asyncio.create_task(run_bot_slot_rounds(bot, messages, other_tables))
         return True
     except Exception as e:
         bot.log(f"[LỖI TRONG CA]: {e}")
         return False
 
 
+async def run_bot_slot_rounds(bot, messages, exclude_tables=None):
+    """1 mốc lịch = rounds_per_slot lần hô+KQ (mặc định 1)."""
+    rounds = max(1, int(bot.config.get("rounds_per_slot") or 1))
+    gap = float(
+        bot.config.get("round_gap_sec")
+        or bot.config.get("step_delay")
+        or 20
+    )
+    bot.is_running_slot = True
+    try:
+        for i in range(rounds):
+            if rounds > 1:
+                bot.log(f"[ROUNDS] Bắt đầu round {i + 1}/{rounds} trong ca")
+            await bot.execute_round(messages, exclude_tables=exclude_tables)
+            if i + 1 < rounds:
+                bot.log(f"[ROUNDS] Nghỉ {gap}s trước round tiếp")
+                await asyncio.sleep(gap)
+    finally:
+        bot.is_running_slot = False
+
+
+async def run_continuous_bot(bot, all_bots):
+    """
+    Chế độ 24/24: hô → gửi ảnh KQ (crop góc phải dưới) → nghỉ gap → hô tiếp.
+    Không chờ mốc lịch interval_minutes.
+    """
+    gap = float(bot.config.get("continuous_gap_sec") or 2)
+    bot.log(
+        f"[24/24] Bật kéo liên tục — gap {gap}s | crop="
+        f"{bot.config.get('result_crop_mode') or 'bottom_right'}"
+    )
+    while True:
+        try:
+            await bot.ensure_connected()
+            source_entity = await bot.resolve_entity(bot.source_username)
+            if not source_entity:
+                bot.log(f"[24/24] Không thấy nguồn @{bot.source_username} — chờ 10s")
+                await asyncio.sleep(10)
+                continue
+            messages = []
+            need = min_source_messages_for_config(bot.config)
+            async for m in bot.client.iter_messages(source_entity, limit=max(need + 4, 20)):
+                messages.append(m)
+            messages.sort(key=lambda x: x.id)
+            if len(messages) < need:
+                bot.log(
+                    f"[24/24] Chưa đủ {need} tin nguồn (có {len(messages)}) — chờ 8s"
+                )
+                await asyncio.sleep(8)
+                continue
+            other_tables = [
+                b.session_table
+                for b in all_bots
+                if b != bot and b.is_running_round and b.session_table
+            ]
+            bot.log("[24/24] Bắt đầu vòng hô + gửi KQ…")
+            await run_bot_slot_rounds(bot, messages, other_tables)
+        except Exception as e:
+            bot.log(f"[24/24] Lỗi vòng: {e}")
+        await asyncio.sleep(max(0.5, gap))
+
+
 async def run_single_bot_schedule(bot, all_bots):
+    if bot.config.get("continuous_mode"):
+        await run_continuous_bot(bot, all_bots)
+        return
+
     interval = bot.config.get('interval_minutes', 10)
     slots = generate_slots_from_config(bot.config)
     slots_set = set(slots)
@@ -3170,7 +3691,7 @@ async def run_single_bot_schedule(bot, all_bots):
             slot_key = now.strftime('%Y-%m-%d %H:%M')
             if slot_key not in sent_slots:
                 sent_slots.add(slot_key)
-                if bot.is_running_round:
+                if bot.is_running_round or bot.is_running_slot:
                     bot.pending_slots.append(slot_key)
                     bot.log(
                         f"[QUEUE] Ca {slot_key} xếp hàng "
@@ -3183,7 +3704,7 @@ async def run_single_bot_schedule(bot, all_bots):
                     await launch_bot_round(bot, all_bots, slot_key)
                     launched_now = True
 
-        if (not launched_now) and (not bot.is_running_round) and bot.pending_slots:
+        if (not launched_now) and (not bot.is_running_round) and (not bot.is_running_slot) and bot.pending_slots:
             nxt = bot.pending_slots.pop(0)
             bot.log(f"[QUEUE] Chạy ca xếp hàng {nxt}")
             await launch_bot_round(bot, all_bots, nxt)
@@ -3281,8 +3802,12 @@ async def main():
                 )
                 continue
             other_tables = [other.session_table for other in bots if other != b and other.session_table]
-            b.log(f"[RUN_NOW] Khởi chạy ca test ngay (cần {need} tin nguồn, có {len(messages)}).")
-            asyncio.create_task(b.execute_round(messages, exclude_tables=other_tables))
+            rounds = max(1, int(b.config.get("rounds_per_slot") or 1))
+            b.log(
+                f"[RUN_NOW] Khởi chạy ca test ngay "
+                f"(cần {need} tin nguồn, có {len(messages)}, rounds={rounds})."
+            )
+            asyncio.create_task(run_bot_slot_rounds(b, messages, other_tables))
 
     # Chạy schedule song song độc lập cho từng bot
     tasks = [run_single_bot_schedule(b, bots) for b in bots]
