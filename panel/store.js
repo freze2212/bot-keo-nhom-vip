@@ -83,7 +83,7 @@ function defaultGroup(partial = {}) {
     group_id: String(partial.group_id || "").trim(),
     is_virtual: isVirtual,
     bet_amount_label: String(partial.bet_amount_label || "1000"),
-    interval_minutes: [2, 5, 10].includes(Number(partial.interval_minutes))
+    interval_minutes: [2, 5, 10, 15, 30, 60].includes(Number(partial.interval_minutes))
       ? Number(partial.interval_minutes)
       : 5,
     start_time: partial.start_time || "08:00",
@@ -92,8 +92,12 @@ function defaultGroup(partial = {}) {
     win_rate: Number(partial.win_rate) || 0.8,
     loss_rate: Number(partial.loss_rate) || 0.15,
     tie_rate: Number(partial.tie_rate) || 0.05,
-    // Báo bàn chỉ thật
-    send_table_preview: isVirtual ? false : !!partial.send_table_preview,
+    // Báo bàn: ảo tắt; 24/24 bắt buộc nhóm riêng; thật theo tùy chọn
+    send_table_preview: isVirtual
+      ? false
+      : !!partial.continuous_mode
+        ? true
+        : !!partial.send_table_preview,
     table_preview_group_id: isVirtual
       ? ""
       : String(partial.table_preview_group_id || "").trim(),
@@ -122,14 +126,30 @@ function defaultGroup(partial = {}) {
     result_crop_bottom_frac: Number(partial.result_crop_bottom_frac) || 0.3,
     result_crop_right_trim_frac: Number(partial.result_crop_right_trim_frac) || 0.035,
     token_bot: String(partial.token_bot || "").trim(),
+    // bot = BotFather | boss = userbot (số Tele đã login)
+    send_via: (() => {
+      const v = String(partial.send_via || "").trim().toLowerCase();
+      if (v === "bot" || v === "boss") return v;
+      return String(partial.token_bot || "").trim() ? "bot" : "boss";
+    })(),
+    // Kết quả: stamp | caption | forward (tin từ kênh nguồn)
+    kq_style: (() => {
+      const k = String(partial.kq_style || "").trim().toLowerCase();
+      if (k === "stamp" || k === "caption" || k === "forward") return k;
+      if (partial.result_via_source_messages) return "forward";
+      if (partial.stamp_result_on_image) return "stamp";
+      return "caption";
+    })(),
     content_style: String(partial.content_style || "simple").trim() || "simple",
     gap_thep_ladder: String(partial.gap_thep_ladder || "50,100,200,400,800").trim(),
+    gap_thep_day_open: Number(partial.gap_thep_day_open) || 0,
     ho_template: String(partial.ho_template || ""),
     outcome_caption_mode: String(partial.outcome_caption_mode || "default").trim() || "default",
     stamp_result_on_image: !!partial.stamp_result_on_image,
     outcome_caption_win: String(partial.outcome_caption_win || ""),
     outcome_caption_loss: String(partial.outcome_caption_loss || ""),
     outcome_caption_tie: String(partial.outcome_caption_tie || ""),
+    result_via_source_messages: !!partial.result_via_source_messages,
     // Tình trạng nhóm (ok / paused / banned / no_access / error / unknown)
     health: partial.health || (partial.enabled === false ? "paused" : "unknown"),
     health_msg: partial.health_msg || "",
@@ -202,12 +222,48 @@ function saveTenant(body) {
       ? `user_session_${digits}`
       : `user_session_${merged.id}`;
   }
-  // Force ảo: tắt báo bàn
+  // Force ảo: tắt báo bàn. 24/24: luôn báo bàn + bắt buộc nhóm riêng.
   merged.groups = (merged.groups || []).map((g) => {
     const gg = defaultGroup(g);
     if (gg.is_virtual) {
       gg.send_table_preview = false;
       gg.table_preview_group_id = "";
+      gg.continuous_mode = false;
+    } else if (gg.continuous_mode) {
+      gg.send_table_preview = true;
+      // 24/24 không dùng tin thắng/thua/mở đầu từ kênh
+      gg.open_msgs = [];
+      gg.after_preview_msgs = [];
+      gg.end_msgs = [];
+      gg.win_msg = null;
+      gg.loss_msg = null;
+      gg.tie_msg = null;
+      if (gg.kq_style === "forward") {
+        gg.kq_style = "caption";
+      }
+    }
+    // Đồng bộ send_via ↔ token + kq_style ↔ stamp/caption/forward
+    if (gg.send_via === "boss") {
+      gg.token_bot = "";
+    }
+    if (gg.kq_style === "stamp") {
+      gg.stamp_result_on_image = true;
+      gg.outcome_caption_mode = "none";
+      gg.result_via_source_messages = false;
+    } else if (gg.kq_style === "forward") {
+      gg.stamp_result_on_image = false;
+      gg.outcome_caption_mode = "none";
+      gg.result_via_source_messages = true;
+    } else {
+      // caption
+      gg.stamp_result_on_image = false;
+      gg.result_via_source_messages = false;
+      if (!gg.outcome_caption_mode || gg.outcome_caption_mode === "none") {
+        gg.outcome_caption_mode =
+          gg.outcome_caption_win || gg.outcome_caption_loss || gg.outcome_caption_tie
+            ? "template"
+            : "default";
+      }
     }
     return gg;
   });
@@ -393,9 +449,10 @@ function groupStatusLabel(g) {
     ok: "Đang ổn",
     paused: "Tạm dừng",
     banned: "Nhóm bị bay / cấm",
-    no_access: "Bot không vào được nhóm",
-    error: "Lỗi",
-    unknown: "Chưa kiểm tra",
+    no_access: "Không gửi được",
+    error: "Lỗi gửi",
+    slow: "Giới hạn tốc độ",
+    unknown: "Chưa phát",
   };
   return { code: h, label: map[h] || map.unknown };
 }
@@ -600,16 +657,16 @@ function groupToForwardAccount(tenant, group) {
     session_table: "C01",
     source_username: tenant.source_username || "frezeit",
     interval_minutes: Number(group.interval_minutes) || 5,
-    run_now_on_start: true,
-    start_time: group.start_time || "08:00",
-    end_time: group.end_time || "23:00",
+    run_now_on_start: !group.continuous_mode,
+    start_time: group.continuous_mode ? "00:00" : group.start_time || "08:00",
+    end_time: group.continuous_mode ? "23:59" : group.end_time || "23:00",
     bet_amount_label: String(group.bet_amount_label || "1000"),
     is_virtual: isVirtual,
     flow_prior_round: true,
     ho_mode: isVirtual ? "match_shot" : "match_vision",
     step_delay: Number(group.step_delay) || 20,
-    ho_pre_wait_sec: 5,
-    ho_listen_timeout_sec: 90,
+    ho_pre_wait_sec: group.continuous_mode ? 0 : 5,
+    ho_listen_timeout_sec: group.continuous_mode ? 75 : 90,
     post_ho_wait_sec: 0.5,
     result_poll_sec: 0.2,
     result_listen_timeout_sec: 60,
@@ -617,10 +674,15 @@ function groupToForwardAccount(tenant, group) {
     opening_delays: open.map(() => Number(group.step_delay) || 20),
     opening_after_preview: after,
     opening_after_preview_delays: after.map(() => Number(group.step_delay) || 20),
-    send_table_preview: isVirtual ? false : !!group.send_table_preview,
-    table_preview_before_ho: !isVirtual && !!group.send_table_preview,
+    send_table_preview: isVirtual
+      ? false
+      : !!group.continuous_mode
+        ? true
+        : !!group.send_table_preview,
+    table_preview_before_ho:
+      !isVirtual && (!!group.continuous_mode || !!group.send_table_preview),
     send_table_preview_caption: "🎰 SẢNH SEXY BÀN : {table} 💎",
-    result_via_source_messages: true,
+    result_via_source_messages: !!group.result_via_source_messages || group.kq_style === "forward",
     outcome_message_map: {
       WIN: Number(group.win_msg),
       LOSS: Number(group.loss_msg),
@@ -628,7 +690,9 @@ function groupToForwardAccount(tenant, group) {
     },
     ending_order: end,
     ending_delays: end.map(() => Number(group.step_delay) || 20),
-    min_source_messages: minSrc,
+    min_source_messages: group.continuous_mode
+      ? 1
+      : minSrc,
     enabled: group.enabled !== false && !!group.group_id,
     rounds_per_slot: Math.max(1, Number(group.rounds_per_slot) || 1),
     continuous_mode: !!group.continuous_mode,
@@ -642,17 +706,49 @@ function groupToForwardAccount(tenant, group) {
     result_crop_right_trim_frac: Number(group.result_crop_right_trim_frac) || 0.035,
     content_style: String(group.content_style || "simple").trim() || "simple",
     gap_thep_ladder: String(group.gap_thep_ladder || "50,100,200,400,800").trim(),
+    gap_thep_day_open: Number(group.gap_thep_day_open) || 0,
     ho_template: String(group.ho_template || ""),
     outcome_caption_mode: String(group.outcome_caption_mode || "default").trim() || "default",
     stamp_result_on_image: !!group.stamp_result_on_image,
     outcome_caption_win: String(group.outcome_caption_win || ""),
     outcome_caption_loss: String(group.outcome_caption_loss || ""),
     outcome_caption_tie: String(group.outcome_caption_tie || ""),
+    send_via: group.send_via === "bot" ? "bot" : "boss",
+    kq_style: ["stamp", "caption", "forward"].includes(group.kq_style)
+      ? group.kq_style
+      : "caption",
   };
-  if (group.token_bot) acc.token_bot = String(group.token_bot).trim();
+  // 24/24: không forward tin thắng/thua từ kênh (tránh kẹt step_delay ~20s → miss hô)
+  if (!isVirtual && group.continuous_mode) {
+    acc.outcome_message_map = {};
+    acc.opening_order = [];
+    acc.opening_after_preview = [];
+    acc.ending_order = [];
+    acc.ending_delays = [];
+    acc.result_via_source_messages = false;
+    if (acc.kq_style === "forward") {
+      acc.kq_style = "caption";
+      acc.outcome_caption_mode =
+        String(group.outcome_caption_mode || "template").trim() || "template";
+    }
+  }
+  if (group.send_via === "bot" && group.token_bot) {
+    acc.token_bot = String(group.token_bot).trim();
+  }
   if (tenant.twofa) acc.twofa = tenant.twofa;
   if (!isVirtual && group.table_preview_group_id) {
     acc.table_preview_group_id = String(group.table_preview_group_id).trim();
+  }
+  // 24/24 thiếu nhóm báo bàn riêng → không enable
+  if (!isVirtual && group.continuous_mode) {
+    const hô = String(group.group_id || "").trim();
+    const bao = String(group.table_preview_group_id || "").trim();
+    if (!bao || bao === hô) {
+      acc.enabled = false;
+    }
+    if (group.send_via === "bot" && !String(group.token_bot || "").trim()) {
+      acc.enabled = false;
+    }
   }
   if (isVirtual) {
     acc.win_rate = Number(group.win_rate) || 0.8;

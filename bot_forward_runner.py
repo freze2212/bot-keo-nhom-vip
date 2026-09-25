@@ -44,6 +44,18 @@ def _forward_token_bot(config=None):
     return str(raw).strip().strip('"').strip("'")
 
 
+def _raise_tg_http(exc):
+    """HTTP 4xx của Bot API → lỗi có description Telegram."""
+    body = ""
+    try:
+        raw = exc.read().decode("utf-8", errors="replace")
+        parsed = json.loads(raw)
+        body = str(parsed.get("description") or raw)
+    except Exception:
+        body = str(exc)
+    raise RuntimeError(body or str(exc)) from exc
+
+
 def bot_api_send_message(token, chat_id, text, parse_mode=None, timeout=45):
     """Gửi text qua BotFather API (nhóm 24/24)."""
     if not token or not chat_id:
@@ -56,8 +68,11 @@ def bot_api_send_message(token, chat_id, text, parse_mode=None, timeout=45):
     req = urllib.request.Request(
         url, data=data, headers={"Content-Type": "application/json"}, method="POST"
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        _raise_tg_http(exc)
     if not body.get("ok"):
         raise RuntimeError(body.get("description") or str(body))
     return True
@@ -105,11 +120,140 @@ def bot_api_send_photo(token, chat_id, filepath, caption="", parse_mode=None, ti
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        res = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            res = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        _raise_tg_http(exc)
     if not res.get("ok"):
         raise RuntimeError(res.get("description") or str(res))
     return True
+
+
+def classify_send_failure(err):
+    """Mỗi lỗi gửi tin → mã, mô tả, hướng dẫn. FloodWait trả slow, không tính hỏng nhóm vĩnh viễn."""
+    raw = str(err or "")
+    e = raw.lower()
+    wait = ""
+    import re as _re
+    m = _re.search(r"(\d+)\s*second", e)
+    if m:
+        wait = m.group(1)
+
+    rules = (
+        (
+            ("flood", "too many requests", "retry after"),
+            "slow",
+            "Telegram đang giới hạn tốc độ gửi.",
+            f"Không sửa nhóm. Đợi khoảng {wait or '30'} giây, hệ thống gửi lại ở vòng sau.",
+        ),
+        (
+            ("unauthorized", "bot token", "token is invalid", "access token", "auth key unregistered", "session_revoked", "auth_key"),
+            "error",
+            "Phiên hoặc token Telegram không còn hợp lệ.",
+            "Kênh dùng BotFather: lấy token mới ở @BotFather, dán lại rồi lưu. Kênh dùng số điện thoại: vào Phiên Telegram và xác nhận mã lại.",
+        ),
+        (
+            ("user_banned", "banned from", "kicked", "user_kicked"),
+            "banned",
+            "Tài khoản hoặc bot đã bị cấm / đuổi khỏi nhóm.",
+            "Nhờ chủ nhóm bỏ cấm, rồi thêm lại bot hoặc tài khoản vào nhóm và bật quyền gửi tin.",
+        ),
+        (
+            ("chat_write_forbidden", "not enough rights", "have no rights", "need administrator rights", "can't write", "chat_admin_required"),
+            "no_access",
+            "Đã vào nhóm nhưng không có quyền gửi tin.",
+            "Vào nhóm, mở quyền gửi tin nhắn và gửi ảnh cho bot hoặc tài khoản. Nhóm chỉ admin được nói thì phải thêm làm quản trị viên.",
+        ),
+        (
+            ("channel_private", "not a member", "bot is not a member", "bot was kicked", "chat not found", "group chat was deactivated", "peer_id_invalid", "could not find the input entity"),
+            "no_access",
+            "Không vào được nhóm, hoặc ID nhóm không đúng.",
+            "Thêm bot/tài khoản vào đúng nhóm. Mở thông tin nhóm trên Telegram, copy lại ID dạng -100… rồi lưu cấu hình. Nếu là nhóm báo bàn, kiểm tra ID báo bàn riêng.",
+        ),
+        (
+            ("message thread not found", "topic_closed", "topic closed"),
+            "error",
+            "Chủ đề trong nhóm đã đóng hoặc không tồn tại.",
+            "Mở lại chủ đề trên Telegram, hoặc gửi vào hội thoại chính của nhóm, không gửi vào topic đã khóa.",
+        ),
+        (
+            ("message is too long", "caption is too long", "media_caption_too_long"),
+            "error",
+            "Nội dung tin hoặc chú thích ảnh quá dài.",
+            "Rút template hô hoặc caption kết quả cho ngắn hơn 1000 ký tự, rồi lưu cấu hình.",
+        ),
+        (
+            ("photo_invalid", "image_process_failed", "file reference", "can't use file", "failed to get http url"),
+            "error",
+            "Ảnh kết quả không gửi được.",
+            "Không cần sửa nhóm. Đợi ván sau có ảnh mới. Nếu lỗi lặp lại, kiểm tra máy chụp còn đang chạy.",
+        ),
+        (
+            ("timed out", "timeout", "connection reset", "network is unreachable", "temporarily unavailable", "bad gateway"),
+            "error",
+            "Mất kết nối tới Telegram lúc gửi.",
+            "Không sửa nhóm. Hệ thống gửi lại ở vòng sau. Nếu kéo dài, kiểm tra mạng của máy đang chạy bot.",
+        ),
+    )
+    for keys, code, summary, guide in rules:
+        if any(k in e for k in keys):
+            return code, summary, guide
+    short = raw.replace("\n", " ").strip()[:160] or "Gửi tin thất bại"
+    return (
+        "error",
+        f"Gửi tin thất bại: {short}",
+        "Mở cấu hình kênh, kiểm tra ID nhóm và cách gửi (BotFather hoặc số điện thoại). Nếu vừa đổi nhóm, thêm lại bot rồi lưu.",
+    )
+
+
+_health_written = {}
+
+
+def report_channel_health(bot_id, code, summary, guide=""):
+    """Ghi health + hướng dẫn lên tenant theo lần gửi thật."""
+    bid = str(bot_id or "")
+    if not bid.startswith("bot_customer_"):
+        return
+    gid = bid[len("bot_customer_") :]
+    text = summary if not guide else f"{summary}\nCách xử lý: {guide}"
+    sig = (code, text)
+    if _health_written.get(bid) == sig:
+        return
+    folder = os.path.join(ROOT_DIR, "tenants")
+    if not os.path.isdir(folder):
+        return
+    now = datetime.now(TZ).isoformat()
+    for name in os.listdir(folder):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(folder, name)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        groups = data.get("groups") or []
+        hit = False
+        for g in groups:
+            if str(g.get("id") or "") != gid:
+                continue
+            if g.get("enabled") is False:
+                return
+            g["health"] = code
+            g["health_msg"] = text
+            g["health_at"] = now
+            hit = True
+            break
+        if not hit:
+            continue
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            _health_written[bid] = sig
+        except Exception as ex:
+            log(f"[HEALTH] không ghi được {name}: {ex}")
+        return
 
 
 def now_vn():
@@ -252,6 +396,24 @@ def format_profit_message(pnl):
         return f"💰 <b>LỢI NHUẬN CA NÀY {pnl}</b>"
     return f"💰 <b>LỢI NHUẬN CA NÀY 0</b>"
 
+
+def hand_pnl(outcome_key, stake):
+    """Một ván: thắng cộng đúng mức đã hô, thua trừ đúng mức đó, hòa = 0."""
+    stake_n = float(stake or 0)
+    key = str(outcome_key or "").upper()
+    if key == "WIN":
+        return stake_n
+    if key == "LOSS":
+        return -stake_n
+    return 0.0
+
+
+def _pnl_shown(pnl):
+    pnl = float(pnl or 0)
+    if pnl == int(pnl):
+        return int(pnl)
+    return pnl
+
 def build_profit_result_text(bet_amount_label, norm_winner, norm_bet):
     """Thay Húp/Thua bằng tin lợi nhuận có format đẹp."""
     amount = parse_bet_amount_numeric(bet_amount_label)
@@ -317,31 +479,54 @@ def gap_thep_state_path(bot_id):
     return os.path.join(d, f"{safe}.json")
 
 
-def load_gap_thep_state(bot_id):
+def gap_thep_day_open(config):
+    """Mốc tổng lãi đầu ngày (đơn vị K). 8tr = 8000. Trống = 0."""
+    raw = (config or {}).get("gap_thep_day_open")
+    if raw is None or raw == "":
+        return 0.0
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def load_gap_thep_state(bot_id, day_open=0.0):
     path = gap_thep_state_path(bot_id)
     today = datetime.now(TZ).strftime("%Y-%m-%d")
-    default = {
+    base = float(day_open or 0)
+    fresh = {
         "day": today,
         "level": 0,
-        "total_profit": 0.0,
+        "total_profit": base,
         "prev_result": "—",
+        "day_open": base,
     }
     try:
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f) or {}
             if str(data.get("day") or "") != today:
-                default["day"] = today
-                return default
-            default.update({
+                save_gap_thep_state(bot_id, fresh)
+                return fresh
+            profit = float(data.get("total_profit") or 0)
+            # File cũ reset về 0 lúc sang ngày — cộng mốc 1 lần.
+            if "day_open" not in data and base:
+                profit += base
+            state = {
                 "day": today,
                 "level": int(data.get("level") or 0),
-                "total_profit": float(data.get("total_profit") or 0),
+                "total_profit": profit,
                 "prev_result": str(data.get("prev_result") or "—"),
-            })
+                "day_open": base if "day_open" not in data else float(data.get("day_open") or 0),
+            }
+            if "day_open" not in data and base:
+                save_gap_thep_state(bot_id, state)
+            return state
     except Exception:
         pass
-    return default
+    if base:
+        save_gap_thep_state(bot_id, fresh)
+    return fresh
 
 
 def save_gap_thep_state(bot_id, state):
@@ -355,7 +540,7 @@ def save_gap_thep_state(bot_id, state):
 
 def current_gap_thep_stake(config, bot_id):
     levels = parse_gap_thep_ladder(config)
-    st = load_gap_thep_state(bot_id)
+    st = load_gap_thep_state(bot_id, gap_thep_day_open(config))
     idx = max(0, min(int(st.get("level") or 0), len(levels) - 1))
     return levels[idx], st, levels
 
@@ -363,7 +548,7 @@ def current_gap_thep_stake(config, bot_id):
 def apply_gap_thep_result(config, bot_id, outcome_key, stake):
     """Cập nhật bậc + tổng lãi sau ván (WIN reset, LOSS lên bậc, TIE giữ)."""
     levels = parse_gap_thep_ladder(config)
-    st = load_gap_thep_state(bot_id)
+    st = load_gap_thep_state(bot_id, gap_thep_day_open(config))
     key = str(outcome_key or "").upper()
     stake_n = float(stake or 0)
     if key == "WIN":
@@ -377,6 +562,7 @@ def apply_gap_thep_result(config, bot_id, outcome_key, stake):
     else:
         st["prev_result"] = "⚖️ HÒA"
     st["day"] = datetime.now(TZ).strftime("%Y-%m-%d")
+    st["day_open"] = gap_thep_day_open(config)
     save_gap_thep_state(bot_id, st)
     return st
 
@@ -430,7 +616,7 @@ def build_ho_text_for_config(config, bet_side, bot_id=None, table_name=None):
         stake = parse_bet_amount_numeric((config or {}).get("bet_amount_label")) or 50
         tpl = (config or {}).get("ho_template") or ""
         if tpl.strip():
-            st = load_gap_thep_state(bot_id) if bot_id else {}
+            st = load_gap_thep_state(bot_id, gap_thep_day_open(config)) if bot_id else {}
             vars_ = _content_vars(
                 bet_side,
                 stake,
@@ -1053,7 +1239,15 @@ def config_step_delay(config, default=20):
 
 async def send_post_result_endings(config, forward_idx, outcome_key):
     """Sau kết quả: tin theo thắng/thua/hòa, rồi ending_order."""
+    # 24/24 slim + caption/stamp: tuyệt đối không forward tin KQ từ kênh
+    # (step_delay ~20s → miss hô vision ván sau)
+    if config.get("continuous_mode") and config.get("continuous_slim", True):
+        kq = str(config.get("kq_style") or "").strip().lower()
+        if kq != "forward":
+            return
     omap = config.get('outcome_message_map') or {}
+    if not omap:
+        return
     key = str(outcome_key or '').upper()
     idx = omap.get(key)
     step = config_step_delay(config, 20)
@@ -1061,14 +1255,22 @@ async def send_post_result_endings(config, forward_idx, outcome_key):
         await forward_idx(idx, f"Tin kết quả ({key}) — tin thứ {idx + 1}, index {idx}")
         await asyncio.sleep(step)
 
-    ending_order = config.get('ending_order', [3, 4])
-    ending_delays = config.get('ending_delays', [step] * len(ending_order))
+    ending_order = config.get('ending_order') or []
+    ending_delays = config.get('ending_delays') or []
     for step_num, end_idx in enumerate(ending_order):
         await forward_idx(end_idx, f"Tin kết thúc (tin thứ {end_idx + 1}, index {end_idx})")
         delay = ending_delays[step_num] if step_num < len(ending_delays) else step
         await asyncio.sleep(delay)
 
 def min_source_messages_for_config(config):
+    # 24/24 slim + caption/stamp: không cần tin mẫu thắng/thua từ kênh
+    if config.get("continuous_mode") and config.get("continuous_slim", True):
+        kq = str(config.get("kq_style") or "").strip().lower()
+        if not config.get("result_via_source_messages") and kq != "forward":
+            try:
+                return max(1, int(config.get("min_source_messages", 1) or 1))
+            except (TypeError, ValueError):
+                return 1
     indices = []
     for key in ("opening_order", "opening_after_preview", "ending_order"):
         vals = config.get(key) or []
@@ -1105,8 +1307,14 @@ def build_outcome_caption(outcome, bet_amount_label):
     return "HÒA 0"
 
 
-def fetch_latest_vision_bet(table_name, name_service=None, max_age_ms=300000, min_ho_at=None):
-    """Cửa vision vừa đặt — cùng nguồn hô Telegram."""
+def fetch_latest_vision_bet(
+    table_name, name_service=None, max_age_ms=300000, min_ho_at=None, raw=False
+):
+    """Cửa vision vừa đặt — cùng nguồn hô Telegram.
+
+    raw=False → 'B'/'P'/None (API cũ).
+    raw=True  → dict {betSide, signalId, hoAt} hoặc None.
+    """
     try:
         params = {
             "tableName": str(table_name or "").strip().upper(),
@@ -1122,12 +1330,21 @@ def fetch_latest_vision_bet(table_name, name_service=None, max_age_ms=300000, mi
             body = json.loads(res.read().decode("utf-8"))
         if not body.get("success") or not body.get("data"):
             return None
-        side = str(body["data"].get("betSide") or "").strip().upper()
+        data = body["data"]
+        side = str(data.get("betSide") or "").strip().upper()
         if side.startswith("B"):
-            return "B"
-        if side.startswith("P"):
-            return "P"
-        return None
+            side = "B"
+        elif side.startswith("P"):
+            side = "P"
+        else:
+            return None
+        if raw:
+            return {
+                "betSide": side,
+                "signalId": data.get("signalId"),
+                "hoAt": data.get("hoAt"),
+            }
+        return side
     except Exception as ex:
         log(f"[VISION BET] lỗi lấy cửa: {ex}")
         return None
@@ -2289,6 +2506,30 @@ def request_place_bet_api(table_name, bet_side, name_service=None, bet_amount=No
 
 SHARED_TELEGRAM_CLIENTS = {}
 
+
+class _LogOnlyClient:
+    """Thay Telegram khi cấu hình log_only — ghi log, không gửi nhóm."""
+
+    def __init__(self, bot):
+        self.bot = bot
+
+    def is_connected(self):
+        return True
+
+    async def connect(self):
+        return None
+
+    async def send_message(self, entity, text, **kwargs):
+        self.bot._record_log_send("text", text)
+
+    async def send_file(self, entity, file, **kwargs):
+        name = os.path.basename(str(getattr(file, "name", None) or file or ""))
+        self.bot._record_log_send("file", name, kwargs.get("caption"))
+
+    async def get_entity(self, target):
+        return {"log_only": True, "id": target}
+
+
 async def get_or_create_client(session_name, api_id, api_hash):
     if session_name in SHARED_TELEGRAM_CLIENTS:
         client = SHARED_TELEGRAM_CLIENTS[session_name]
@@ -2335,40 +2576,85 @@ class TelegramForwardBot:
             f'user_session_{phone_digits}' if phone_digits else f'user_session_{self.bot_id}'
         )
         self.client = None
+        self._send_log = []
         self.dialog_cache = {}
         self.current_slot_key = None
         self.token_bot = _forward_token_bot(config)
 
     def uses_bot_api_send(self):
-        """Gửi vào group_id bằng BotFather khi có token_bot (24/24)."""
+        """Gửi BotFather khi send_via=bot (hoặc legacy: có token_bot)."""
+        via = str(self.config.get("send_via") or "").strip().lower()
+        if via in ("boss", "user", "userbot"):
+            return False
+        if via == "bot":
+            return bool(self.token_bot and self.group_id)
         return bool(self.token_bot and self.group_id)
 
-    async def tg_send_text(self, entity, txt, parse_mode=None):
-        if self.uses_bot_api_send():
-            await asyncio.to_thread(
-                bot_api_send_message,
-                self.token_bot,
-                self.group_id,
-                txt,
-                parse_mode,
-            )
-            return
-        await self.client.send_message(entity, txt, parse_mode=parse_mode)
+    def _record_log_send(self, kind, payload, caption=None):
+        item = {
+            "kind": kind,
+            "text": str(payload or "")[:500],
+            "caption": str(caption or "")[:240],
+        }
+        self._send_log.append(item)
+        self.log(f"[LOG-ONLY {kind}] {item['text'][:160]}")
 
-    async def tg_send_file(self, entity, filepath, caption=None, parse_mode=None):
-        if self.uses_bot_api_send():
-            await asyncio.to_thread(
-                bot_api_send_photo,
-                self.token_bot,
-                self.group_id,
-                filepath,
-                caption or "",
-                parse_mode,
-            )
+    async def tg_send_text(self, entity, txt, parse_mode=None, chat_id=None):
+        target = chat_id if chat_id is not None else self.group_id
+        if self.config.get("log_only"):
+            self._record_log_send("text", txt)
             return
-        await self.client.send_file(
-            entity, filepath, caption=caption or None, parse_mode=parse_mode
-        )
+        try:
+            if self.uses_bot_api_send():
+                await asyncio.to_thread(
+                    bot_api_send_message,
+                    self.token_bot,
+                    target,
+                    txt,
+                    parse_mode,
+                )
+            else:
+                await self.client.send_message(entity, txt, parse_mode=parse_mode)
+        except Exception as ex:
+            self._note_send_result(ex, target)
+            raise
+        self._note_send_result(None, target)
+
+    async def tg_send_file(self, entity, filepath, caption=None, parse_mode=None, chat_id=None):
+        target = chat_id if chat_id is not None else self.group_id
+        if self.config.get("log_only"):
+            name = os.path.basename(str(filepath or ""))
+            self._record_log_send("file", name, caption)
+            return
+        try:
+            if self.uses_bot_api_send():
+                await asyncio.to_thread(
+                    bot_api_send_photo,
+                    self.token_bot,
+                    target,
+                    filepath,
+                    caption or "",
+                    parse_mode,
+                )
+            else:
+                await self.client.send_file(
+                    entity, filepath, caption=caption or None, parse_mode=parse_mode
+                )
+        except Exception as ex:
+            self._note_send_result(ex, target)
+            raise
+        self._note_send_result(None, target)
+
+    def _note_send_result(self, ex, target=None):
+        where = ""
+        if target is not None and str(target) != str(self.group_id or ""):
+            where = f" (đích {target}, không phải nhóm phát)"
+        if ex is None:
+            report_channel_health(self.bot_id, "ok", "Gửi tin thành công" + where)
+            return
+        code, summary, guide = classify_send_failure(ex)
+        self.log(f"[KÊNH] {code} | {summary}{where} | raw={ex}")
+        report_channel_health(self.bot_id, code, summary + where, guide)
 
     def audit(self, action):
         return
@@ -2376,17 +2662,27 @@ class TelegramForwardBot:
     def log(self, msg):
         log(msg, self.name)
 
-    def sync_session_table_from_vision(self):
-        """Lấy bàn đang active từ vision (NS) — báo bàn đúng Cxx, không cứng C01."""
+    def sync_session_table_from_vision(self, allow_ocr=None):
+        """Lấy bàn đang active từ vision (NS) — báo bàn đúng Cxx, không cứng C01.
+
+        allow_ocr=False: không OCR disk (OCR có thể 2–5s — chặn hô).
+        Mặc định: chỉ OCR khi chưa có session_table hợp lệ.
+        """
         ns = str(self.name_service or self.config.get("name_service") or "NS1").upper()
+        cur = str(self.session_table or "").upper().strip()
+        have_table = bool(cur and cur not in ("NONE", "LOBBY"))
+        if allow_ocr is None:
+            allow_ocr = not have_table
         row = _probe_ns_active_table(ns)
         if row and row.get("table"):
             tbl = str(row["table"]).upper().strip()
             if tbl and tbl not in ("NONE", "LOBBY"):
-                if tbl != str(self.session_table or "").upper():
+                if tbl != cur:
                     self.log(f"[BÀN] session_table {self.session_table} → {tbl} (vision/{ns})")
                 self.session_table = tbl
                 return tbl
+        if not allow_ocr:
+            return self.session_table
         # Fallback: OCR file PREVIEW/CURRENT mới nhất trên disk
         try:
             _vb = os.path.join(ROOT_DIR, "vision_bot")
@@ -2568,6 +2864,10 @@ class TelegramForwardBot:
                 self.dialog_cache[uname.lower().lstrip('@')] = d.entity
 
     async def ensure_connected(self):
+        if self.config.get("log_only"):
+            if self.client is None:
+                self.client = _LogOnlyClient(self)
+            return
         if not self.client:
             self.client = await get_or_create_client(self.session_name, self.api_id, self.api_hash)
         if not self.client.is_connected():
@@ -2578,6 +2878,8 @@ class TelegramForwardBot:
 
     async def resolve_entity(self, target):
         await self.ensure_connected()
+        if self.config.get("log_only"):
+            return {"log_only": True, "id": target}
         if not target:
             return None
         target_str = str(target).strip().lower().lstrip('@')
@@ -2604,52 +2906,112 @@ class TelegramForwardBot:
         return preview
 
     def should_send_table_preview(self):
-        """Báo bàn chỉ cho nhóm kéo THẬT theo ca — không áp dụng nhóm ảo."""
+        """Báo bàn: thật theo ca; 24/24 luôn bật (nhóm riêng). Không áp dụng ảo."""
         if self.config.get("is_virtual"):
             return False
+        if self.config.get("continuous_mode"):
+            return True
         return bool(self.config.get("send_table_preview", False))
 
     def preview_group_id(self):
         """
         Nhóm nhận ảnh báo bàn (chỉ khi should_send_table_preview).
-        Có table_preview_group_id riêng → gửi nhóm đó; không thì gửi nhóm round.
+        24/24: bắt buộc table_preview_group_id khác nhóm hô.
+        Thật theo ca: có riêng thì gửi riêng; không thì gửi nhóm round.
         """
         if not self.should_send_table_preview():
             return None
         dedicated = self.dedicated_preview_group_id()
+        if self.config.get("continuous_mode"):
+            return dedicated  # None nếu chưa gắn / trùng nhóm hô
         if dedicated:
             return dedicated
-        # Không có nhóm riêng: gửi vào đúng nhóm ca (thật)
         return str(self.group_id).strip() if self.group_id else None
 
-    async def _announce_table_change_24(self, send_text):
-        """24/24: tin báo bàn / đổi bàn khi vision đổi Cxx (không chờ opening dài)."""
+    async def _announce_table_after_bet_ok_24(self):
+        """
+        24/24 báo bàn: vào bàn → BET_OK → chụp PREVIEW live → gửi nhóm báo bàn
+        → (caller) mới hô. Chỉ khi bàn mới / đổi bàn (không spam mỗi ván cùng bàn).
+        """
+        self.sync_session_table_from_vision()
         prev = getattr(self, "_announced_table_24", None)
         cur = str(self.session_table or "").strip().upper()
         if not cur or cur in ("NONE", "LOBBY"):
             return
         if prev == cur:
             return
+        preview_gid = self.preview_group_id()
+        if not preview_gid:
+            self.log(
+                "[24/24] THIẾU nhóm báo bàn riêng (table_preview_group_id) "
+                "— khác ID nhóm hô. Bỏ báo bàn ảnh."
+            )
+            self._announced_table_24 = cur
+            self.last_used_table = cur
+            return
+
+        before_m = time.time() - 0.3
+        self.log(
+            f"[24/24 BÁO BÀN] BET_OK xong — request capture live bàn {cur}..."
+        )
+        request_live_capture(cur, name_service=self.name_service)
+        preview_shot = None
+        # Chờ ngắn — có disk thì dùng luôn, không kẹt hô
+        for _ in range(8):
+            await asyncio.sleep(0.2)
+            cand = get_newest_shot_any(
+                cur, newer_than_mtime=before_m, prefer_preview=True
+            )
+            if cand and os.path.exists(cand) and is_real_screenshot_file(cand):
+                preview_shot = cand
+                break
+        if not preview_shot:
+            cand = get_newest_shot_any(cur, prefer_preview=True)
+            if cand and is_real_screenshot_file(cand):
+                preview_shot = cand
+                self.log(
+                    "[24/24 BÁO BÀN] Dùng PREVIEW/CURRENT disk — hô ngay sau ảnh"
+                )
+        if not preview_shot:
+            self.log(f"[24/24 BÁO BÀN] Không có ảnh PREVIEW cho {cur} — bỏ qua, vẫn hô")
+            self._announced_table_24 = cur
+            self.last_used_table = cur
+            return
+
         if prev is None:
-            msg = (
-                f"🎰 <b>BÁO BÀN: {cur}</b>\n"
-                f"AE vào đúng bàn <b>{cur}</b> theo lệnh.\n"
-                f"--------»-----★--—-«--------"
-            )
-            label = f"[24/24 BÁO BÀN] lần đầu → {cur}"
+            cap = str(
+                self.config.get(
+                    "send_table_preview_caption",
+                    "🎰 SẢNH SEXY BÀN : {table} 💎",
+                )
+            ).replace("{table}", cur)
+            label = f"[24/24 BÁO BÀN] sau BET_OK → {cur} → nhóm {preview_gid}"
         else:
-            msg = (
-                f"🔄 <b>ĐỔI BÀN: {prev} → {cur}</b>\n"
-                f"AE chuyển sang bàn <b>{cur}</b>.\n"
-                f"--------»-----★--—-«--------"
+            cap = (
+                f"🔄 ĐỔI BÀN: {prev} → {cur}\n"
+                f"🎰 SẢNH SEXY BÀN : {cur} 💎"
             )
-            label = f"[24/24 ĐỔI BÀN] {prev} → {cur}"
+            label = f"[24/24 ĐỔI BÀN] sau BET_OK {prev} → {cur} → nhóm {preview_gid}"
+
         self._announced_table_24 = cur
         self.last_used_table = cur
+        self.log(label)
+        target_entity = None
+        if not self.uses_bot_api_send():
+            target_entity = await self.resolve_entity(preview_gid)
+            if not target_entity:
+                self.log(f"[24/24 BÁO BÀN] Không resolve nhóm {preview_gid}")
+                return
         try:
-            await send_text(msg, label, parse_mode="html")
+            await self._send_preview_shot(
+                target_entity, preview_shot, cap, chat_id=preview_gid
+            )
         except Exception as ex:
             self.log(f"[24/24 BÁO/ĐỔI BÀN ERROR] {ex}")
+
+    async def _announce_table_change_24(self):
+        """Deprecated path — dùng _announce_table_after_bet_ok_24."""
+        await self._announce_table_after_bet_ok_24()
 
     async def _forward_order(self, forward_idx, order, delays, label_prefix, default_delay=20):
         order = order or []
@@ -2659,7 +3021,7 @@ class TelegramForwardBot:
             delay = delays[step_num] if step_num < len(delays) else default_delay
             await asyncio.sleep(delay)
 
-    async def _send_preview_shot(self, entity, preview_shot, caption):
+    async def _send_preview_shot(self, entity, preview_shot, caption, chat_id=None):
         if not preview_shot or not os.path.exists(preview_shot):
             self.log("[SKIP ẢNH BÁO BÀN] Không có ảnh PREVIEW/CURRENT")
             return False
@@ -2670,15 +3032,21 @@ class TelegramForwardBot:
             )
             return False
         try:
-            self.log(f"Gửi ảnh báo bàn: {os.path.basename(preview_shot)}")
-            await self.tg_send_file(entity, preview_shot, caption=caption or None)
+            dest = chat_id or self.group_id
+            self.log(
+                f"Gửi ảnh báo bàn (full, không crop): "
+                f"{os.path.basename(preview_shot)} → {dest}"
+            )
+            await self.tg_send_file(
+                entity, preview_shot, caption=caption or None, chat_id=chat_id
+            )
             self.audit("Ảnh báo bàn")
             return True
         except Exception as ex:
             self.log(f"[LỖI GỬI ẢNH BÁO BÀN]: {ex}")
             if caption:
                 try:
-                    await self.tg_send_text(entity, caption)
+                    await self.tg_send_text(entity, caption, chat_id=chat_id)
                 except Exception:
                     pass
             return False
@@ -2712,9 +3080,7 @@ class TelegramForwardBot:
         else:
             self.log("[24/24] Bỏ tin mở đầu — hô liên tục")
 
-        # 24/24 slim: vẫn báo bàn lần đầu / ĐỔI BÀN khi vision đổi bàn (text nhanh)
-        if slim and not is_virtual:
-            await self._announce_table_change_24(send_text)
+        # 24/24: KHÔNG báo bàn sớm — chờ BET_OK rồi mới chụp + gửi (trước hô)
 
         preview_shot = None
         shots = list_main_shots_for_table(self.session_table)
@@ -2727,7 +3093,7 @@ class TelegramForwardBot:
         if is_virtual:
             self.log("[ẢO] Chờ bước hô — random WIN/LOSS/TIE + lấy LAST_* tương ứng")
 
-        # Báo bàn: CHỈ nhóm THẬT theo ca; 24/24 slim thì bỏ (chỉ hô + ảnh KQ crop)
+        # Báo bàn theo ca (không 24/24): nhóm thật — capture/PREVIEW như cũ
         if self.should_send_table_preview() and not slim:
             self.sync_session_table_from_vision()
             before_m = time.time() - 0.5
@@ -2758,19 +3124,24 @@ class TelegramForwardBot:
             ).replace("{table}", self.session_table)
             target_gid = self.preview_group_id()
             target_entity = entity
+            send_chat = None
             if target_gid and str(target_gid).strip() != str(self.group_id or "").strip():
+                send_chat = str(target_gid).strip()
                 resolved = await self.resolve_entity(target_gid)
                 if resolved:
                     target_entity = resolved
                     self.log(f"[BÁO BÀN] Gửi sang nhóm riêng {target_gid}")
+                elif self.uses_bot_api_send():
+                    self.log(f"[BÁO BÀN] Bot API → nhóm riêng {target_gid}")
                 else:
                     self.log(
                         f"[BÁO BÀN] Không resolve nhóm riêng {target_gid} — gửi nhóm ca"
                     )
+                    send_chat = None
             else:
                 self.log(f"[BÁO BÀN] Gửi vào nhóm ca {self.group_id}")
             await self._send_preview_shot(
-                target_entity, preview_shot, cap
+                target_entity, preview_shot, cap, chat_id=send_chat
             )
             await asyncio.sleep(step)
         elif is_virtual:
@@ -2822,6 +3193,7 @@ class TelegramForwardBot:
             )
         else:
             # THẬT: nghỉ → lắng nghe cửa vision
+            vision_sig = None
             if ho_mode == "match_vision":
                 raw_pre = self.config.get("ho_pre_wait_sec")
                 if raw_pre is None:
@@ -2832,30 +3204,69 @@ class TelegramForwardBot:
                     except (TypeError, ValueError):
                         ho_pre_wait = int(step or 20)
                 ho_listen_timeout = int(self.config.get("ho_listen_timeout_sec") or 90)
-                # continuous: trừ buffer — báo/đổi bàn + network không làm miss BET_OK vừa rồi
+                # Chỉ lấy cửa SAU lần hô trước (+ buffer ngắn nếu vòng trước
+                # bận gửi KQ). Buffer lớn mà không consume → tái hô P cũ khi
+                # vision vừa đặt B.
+                last_ho = int(getattr(self, "_last_vision_ho_at", 0) or 0)
+                now_ms = int(time.time() * 1000)
                 if continuous:
-                    listen_from_ms = int(time.time() * 1000) - 8000
+                    listen_from_ms = max(last_ho + 1, now_ms - 12000)
+                elif last_ho:
+                    # Ván 2, 3: lấy lệnh vision đến trong lúc ván trước gửi KQ,
+                    # không chặn bằng "bây giờ" kẻo rơi vào hô ngẫu nhiên.
+                    listen_from_ms = last_ho + 1
                 else:
-                    listen_from_ms = int(time.time() * 1000)
+                    listen_from_ms = now_ms
                 self.log(
                     f"[HÔ] Nghỉ tối thiểu {ho_pre_wait}s rồi lắng nghe cửa vision "
                     f"(timeout {ho_listen_timeout}s)..."
                 )
-                if ho_pre_wait > 0:
-                    await asyncio.sleep(ho_pre_wait)
-                deadline = time.time() + ho_listen_timeout
-                while time.time() < deadline:
-                    bet_side = fetch_latest_vision_bet(
-                        self.session_table,
-                        self.name_service,
-                        min_ho_at=listen_from_ms,
+                ready = getattr(self, "_pending_vision_sig", None)
+                self._pending_vision_sig = None
+                if ready and ready.get("betSide"):
+                    vision_sig = ready
+                    bet_side = vision_sig["betSide"]
+                    self._bet_caught_at = time.time()
+                    self.log(
+                        f"[HÔ] BET_OK sẵn sau ván trước → {bet_side} (hô ngay)"
                     )
-                    if bet_side:
-                        self.log(f"[HÔ] Lắng nghe được cửa vision → {bet_side}")
-                        break
-                await asyncio.sleep(0.25)
+                else:
+                    if ho_pre_wait > 0:
+                        await asyncio.sleep(ho_pre_wait)
+                    deadline = time.time() + ho_listen_timeout
+                    vision_sig = None
+                    # Đã sync lúc đầu phiên — không sync/OCR ngay (chặn 2–5s).
+                    last_sync = time.time()
+                    while time.time() < deadline:
+                        now_p = time.time()
+                        if now_p - last_sync >= 5.0:
+                            self.sync_session_table_from_vision(allow_ocr=False)
+                            last_sync = now_p
+                        vision_sig = fetch_latest_vision_bet(
+                            self.session_table,
+                            self.name_service,
+                            min_ho_at=listen_from_ms,
+                            raw=True,
+                        )
+                        if vision_sig and vision_sig.get("betSide"):
+                            bet_side = vision_sig["betSide"]
+                            self._bet_caught_at = time.time()
+                            self.log(
+                                f"[HÔ] Lắng nghe được cửa vision → {bet_side}"
+                            )
+                            break
+                        vision_sig = None
+                        await asyncio.sleep(0.05)
                 if not bet_side:
                     self.log("[HÔ] Hết thời gian lắng nghe — chưa có lệnh vision mới")
+                elif vision_sig:
+                    try:
+                        self._last_vision_ho_at = int(
+                            vision_sig.get("hoAt") or time.time() * 1000
+                        )
+                    except (TypeError, ValueError):
+                        self._last_vision_ho_at = int(time.time() * 1000)
+                    self._pending_consume_sid = vision_sig.get("signalId")
             if not bet_side and ho_mode == "match_shot" and new_win in ("B", "P"):
                 bet_side = new_win
             if not bet_side:
@@ -2869,6 +3280,7 @@ class TelegramForwardBot:
                 bet_side = random.choice(["B", "P"])
                 self.log(f"[HÔ] Fallback random {bet_side}")
 
+        # 24/24: HÔ NGAY — báo bàn (nếu bàn mới) chạy sau, không chặn tin hô
         bet_text_to_send, round_stake, ho_html = build_ho_text_for_config(
             self.config,
             bet_side,
@@ -2876,14 +3288,44 @@ class TelegramForwardBot:
             table_name=self.session_table,
         )
         self._round_stake = round_stake
+        t_ho0 = time.time()
         await send_text(
             bet_text_to_send,
             f"Đã gửi tin HÔ {bet_text_to_send[:80]}",
             parse_mode="html" if ho_html or uses_html_messages(self.config) else None,
         )
+        self.log(
+            f"[TIMING] tin HÔ gửi xong +{time.time() - t_ho0:.2f}s (upload Tele)"
+        )
+        try:
+            ho_at = None
+            if vision_sig and vision_sig.get("hoAt"):
+                ho_at = int(vision_sig["hoAt"])
+            if ho_at:
+                delay_s = time.time() - (ho_at / 1000.0)
+                self.log(f"[TIMING] BET_OK→hô Tele = {delay_s:.2f}s")
+        except Exception:
+            pass
+        sid = getattr(self, "_pending_consume_sid", None)
+        self._pending_consume_sid = None
+        if sid:
+            try:
+                await asyncio.to_thread(
+                    consume_main_ho_signal, sid, f"fwd:{self.bot_id}"
+                )
+            except Exception:
+                pass
+        # Báo bàn không chặn hô — chạy sau (bàn mới thôi)
+        if slim and not is_virtual and bet_side:
+            try:
+                await self._announce_table_after_bet_ok_24()
+            except Exception as ex:
+                self.log(f"[24/24 BÁO BÀN] skip sau hô: {ex}")
         after_ho_mtime = time.time()
-        # Không sleep step_delay (20s) sau hô — chỉ nghỉ ngắn rồi poll ảnh ngay
-        post_ho = float(self.config.get("post_ho_wait_sec") or 0.8)
+        if continuous:
+            post_ho = float(self.config.get("post_ho_wait_sec") or 0.05)
+        else:
+            post_ho = float(self.config.get("post_ho_wait_sec") or 0.8)
         if post_ho > 0:
             await asyncio.sleep(post_ho)
 
@@ -2896,6 +3338,7 @@ class TelegramForwardBot:
             settle_poll = float(self.config.get("result_poll_sec") or 0.2)
             settle_deadline = time.time() + settle_wait
             result_shot, result_win = None, None
+            last_peek = 0.0
             while time.time() < settle_deadline:
                 path, win, mtime = get_newest_shot_after(
                     self.session_table,
@@ -2910,6 +3353,32 @@ class TelegramForwardBot:
                         f"winner={win} age={time.time() - mtime:.1f}s"
                     )
                     break
+                # Trong lúc chờ KQ: giữ BET_OK ván sau để round 2/3 hô đúng cửa,
+                # không bỏ lỡ rồi fallback random.
+                if not is_virtual and (time.time() - last_peek) >= 0.25:
+                    last_peek = time.time()
+                    try:
+                        last = int(getattr(self, "_last_vision_ho_at", 0) or 0)
+                        nxt = fetch_latest_vision_bet(
+                            self.session_table,
+                            self.name_service,
+                            min_ho_at=last + 1,
+                            raw=True,
+                        )
+                        if nxt and nxt.get("betSide"):
+                            prev_p = getattr(self, "_pending_vision_sig", None)
+                            if (
+                                not prev_p
+                                or int(nxt.get("hoAt") or 0)
+                                > int(prev_p.get("hoAt") or 0)
+                            ):
+                                self._pending_vision_sig = nxt
+                                self.log(
+                                    f"[ROUNDS] Chờ KQ — đã có BET_OK "
+                                    f"{nxt.get('betSide')} sẵn cho ván sau"
+                                )
+                    except Exception:
+                        pass
                 await asyncio.sleep(settle_poll)
             if not result_shot:
                 self.log(
@@ -2938,11 +3407,21 @@ class TelegramForwardBot:
                     red = float(((cls or {}).get("toast") or {}).get("red") or 0)
                     tie_g = float((cls or {}).get("tie_green") or 0)
                     toast_strong = toast_kind in ("win", "lose", "tie") or gold >= 0.08 or red >= 0.12 or tie_g >= 0.35
-                    # File gắn TIE → luôn HÒA (không để mid=win giả → THẮNG)
+                    # Ưu tiên hô × cửa thắng trong filename (WB/WP/WT).
+                    # Không tin tag WIN/LOSS trong tên file / toast mid-win giả
+                    # (dễ ra “hô CON + ảnh CÁI mà caption THẮNG”).
                     if file_outcome == "TIE" or file_win == "T" or kind == "tie":
                         outcome_key = "TIE"
                         result_win = "T"
-                        caption_src = "file-tie" if file_outcome == "TIE" or file_win == "T" else f"toast:{cls.get('detail')}"
+                        caption_src = (
+                            "file-tie"
+                            if file_outcome == "TIE" or file_win == "T"
+                            else f"toast:{cls.get('detail')}"
+                        )
+                    elif file_win in ("B", "P") and bet_side in ("B", "P"):
+                        result_win = file_win
+                        outcome_key = outcome_from_ho_and_winner(bet_side, file_win)
+                        caption_src = "hô×winner-file"
                     elif toast_strong and cls.get("ok") and kind in ("win", "lose"):
                         outcome_key = {"win": "WIN", "lose": "LOSS"}[kind]
                         caption_src = f"toast:{cls.get('detail')}"
@@ -2953,15 +3432,19 @@ class TelegramForwardBot:
                 except Exception as ex:
                     self.log(f"[KẾT QUẢ THẬT] reclassify lỗi: {ex}")
                 if not outcome_key:
-                    # Fallback: hô × winner file (WT_TIE → TIE)
-                    if file_outcome in ("WIN", "LOSS", "TIE"):
+                    # Fallback: hô × winner file (không tin tag WIN/LOSS filename)
+                    fw = file_win or result_win
+                    if fw == "T" or file_outcome == "TIE":
+                        outcome_key = "TIE"
+                        result_win = "T"
+                        caption_src = "file-tie"
+                    elif fw in ("B", "P") and bet_side in ("B", "P"):
+                        result_win = fw
+                        outcome_key = outcome_from_ho_and_winner(bet_side, fw)
+                        caption_src = "hô×winner"
+                    elif file_outcome in ("WIN", "LOSS", "TIE"):
                         outcome_key = file_outcome
                         caption_src = "filename"
-                        if file_outcome == "TIE":
-                            result_win = "T"
-                    elif result_win in ("B", "P", "T"):
-                        outcome_key = outcome_from_ho_and_winner(bet_side, result_win)
-                        caption_src = "hô×winner"
                     else:
                         outcome_key = "TIE"
                         caption_src = "default-tie"
@@ -3032,34 +3515,444 @@ class TelegramForwardBot:
             if not outcome_key:
                 outcome_key = "TIE"
 
-        await asyncio.sleep(0.15 if slim else step)
+        # Sau KQ: giữ BET_OK đã bắt trong lúc chờ. 24/24 peek thêm rồi hô chuỗi.
+        # Nhóm theo lịch (2–3 ván/ca): không xóa pending — ván sau trong ca dùng tiếp.
+        if not is_virtual and not (slim and continuous):
+            try:
+                last = int(getattr(self, "_last_vision_ho_at", 0) or 0)
+                nxt = fetch_latest_vision_bet(
+                    self.session_table,
+                    self.name_service,
+                    min_ho_at=last + 1,
+                    raw=True,
+                )
+                if nxt and nxt.get("betSide"):
+                    prev_p = getattr(self, "_pending_vision_sig", None)
+                    if (
+                        not prev_p
+                        or int(nxt.get("hoAt") or 0) >= int(prev_p.get("hoAt") or 0)
+                    ):
+                        self._pending_vision_sig = nxt
+                        self.log(
+                            f"[ROUNDS] KQ xong — BET_OK {nxt.get('betSide')} "
+                            f"giữ cho ván sau trong ca"
+                        )
+            except Exception as ex:
+                self.log(f"[ROUNDS] peek BET_OK sau KQ lỗi: {ex}")
+
+        if slim and continuous and not is_virtual:
+            try:
+                self.sync_session_table_from_vision()
+                last = int(getattr(self, "_last_vision_ho_at", 0) or 0)
+                nxt = fetch_latest_vision_bet(
+                    self.session_table,
+                    self.name_service,
+                    min_ho_at=last + 1,
+                    raw=True,
+                )
+                if nxt and nxt.get("betSide"):
+                    self._pending_vision_sig = nxt
+                    self.log(
+                        f"[24/24] KQ xong — BET_OK sẵn {nxt.get('betSide')} "
+                        f"→ vòng sau hô ngay"
+                    )
+                else:
+                    self._pending_vision_sig = None
+            except Exception as ex:
+                self.log(f"[24/24] peek BET_OK sau KQ lỗi: {ex}")
+                self._pending_vision_sig = None
+
+        rounds_n = max(1, int(self.config.get("rounds_per_slot") or 1))
+        multi = (not continuous) and rounds_n > 1 and bool(result_shot and outcome_key)
+        if multi:
+            first_delta = hand_pnl(outcome_key, getattr(self, "_round_stake", 0) or 0)
+            pnl = first_delta
+            parts = [str(outcome_key)]
+            self.log(
+                f"[ROUNDS] Ván 1/{rounds_n} {outcome_key} "
+                f"({'+' if first_delta > 0 else ''}{_pnl_shown(first_delta)})"
+            )
+            extra_pnl, extra_parts = await self._chain_slot_rounds(
+                entity, send_text, rounds_n - 1, rounds_n
+            )
+            pnl += extra_pnl
+            parts.extend(extra_parts)
+            shown = _pnl_shown(pnl)
+            await send_text(
+                format_profit_message(shown),
+                f"Lợi nhuận ca {' '.join(parts)} = {shown}",
+                parse_mode="html",
+            )
+            end_order = self.config.get("ending_order", [4]) or []
+            await self._forward_order(
+                forward_idx,
+                end_order,
+                [0] * len(end_order),
+                "Tin kết thúc",
+                0,
+            )
+            self.log(
+                f"HOÀN THÀNH CA {rounds_n} VÁN "
+                f"({'ẢO' if is_virtual else 'THẬT'}) "
+                f"nhóm {self.group_id} | {' '.join(parts)} | lãi {shown}\n"
+            )
+            return
+
+        if not slim:
+            await asyncio.sleep(step)
 
         if not self.config.get("result_via_source_messages"):
             if not result_caption:
                 result_text = build_virtual_result_for_config(self.config, outcome_key)
                 await send_text(result_text, f"Tin kết quả text ({outcome_key})")
-                await asyncio.sleep(0.15 if slim else step)
+                if not slim:
+                    await asyncio.sleep(step)
 
-        if not slim:
-            if self.config.get("outcome_message_map"):
+        if slim:
+            # 24/24: không forward tin thắng/thua từ kênh — chỉ content hô + caption/stamp ảnh
+            kq = str(self.config.get("kq_style") or "").strip().lower()
+            if kq == "forward" and self.config.get("outcome_message_map"):
                 await send_post_result_endings(self.config, forward_idx, outcome_key)
-            else:
-                await self._forward_order(
-                    forward_idx,
-                    self.config.get("ending_order", [4]),
-                    self.config.get("ending_delays", [step]),
-                    "Tin kết thúc",
-                    step,
-                )
+        elif self.config.get("outcome_message_map"):
+            await send_post_result_endings(self.config, forward_idx, outcome_key)
         else:
-            # 24/24: chỉ gửi tin WIN/LOSS/TIE ngắn nếu có map, bỏ ending dài
-            if self.config.get("outcome_message_map"):
-                await send_post_result_endings(self.config, forward_idx, outcome_key)
+            await self._forward_order(
+                forward_idx,
+                self.config.get("ending_order", [4]),
+                self.config.get("ending_delays", [step]),
+                "Tin kết thúc",
+                step,
+            )
 
         self.log(
             f"HOÀN THÀNH CA PRIOR-ROUND ({'ẢO' if is_virtual else 'THẬT'}) "
             f"nhóm {self.group_id} | {outcome_key}\n"
         )
+
+        # 24/24: BET_OK sẵn → hô ngay trong cùng ca (bỏ vòng continuous ~3s)
+        if slim and continuous and not is_virtual:
+            await self._chain_ho_while_pending_24(entity, send_text)
+
+    async def _wait_next_vision_bet_24(self, max_wait_s):
+        """Hot-wait BET_OK mới — không restart vòng continuous (tránh lệch 3–7s)."""
+        deadline = time.time() + max(1.0, float(max_wait_s or 75))
+        last_sync = time.time()
+        while time.time() < deadline:
+            nxt = getattr(self, "_pending_vision_sig", None)
+            if nxt and nxt.get("betSide"):
+                return nxt
+            try:
+                now = time.time()
+                if now - last_sync >= 5.0:
+                    self.sync_session_table_from_vision(allow_ocr=False)
+                    last_sync = now
+                last = int(getattr(self, "_last_vision_ho_at", 0) or 0)
+                nxt = fetch_latest_vision_bet(
+                    self.session_table,
+                    self.name_service,
+                    min_ho_at=last + 1,
+                    raw=True,
+                )
+                if nxt and nxt.get("betSide"):
+                    return nxt
+            except Exception:
+                pass
+            await asyncio.sleep(0.05)
+        return None
+
+    async def _send_round_result_image(
+        self, entity, result_shot, outcome_key, bet_side, result_win, is_virtual, stake
+    ):
+        """Gửi ảnh KQ đã crop/stamp — dùng chung ván trong ca nhiều ván."""
+        if not result_shot or not os.path.exists(result_shot) or not outcome_key:
+            return False
+        send_path = apply_result_image_crop(
+            self.config, result_shot, is_virtual=is_virtual
+        ) or result_shot
+        result_caption = None
+        if self.config.get("stamp_result_on_image", True):
+            send_path = stamp_outcome_on_image(
+                send_path, outcome_key, self.bet_amount_label
+            )
+        else:
+            result_caption = build_outcome_caption_for_config(
+                self.config, outcome_key, stake=stake
+            )
+        style = str(self.config.get("content_style") or "").lower()
+        if style in ("gap_thep", "gap", "martingale"):
+            apply_gap_thep_result(self.config, self.bot_id, outcome_key, stake or 0)
+        try:
+            await self.tg_send_file(entity, send_path, caption=result_caption or None)
+            self.log(
+                f"[ROUNDS] ảnh KQ {outcome_key} {os.path.basename(send_path)} "
+                f"hô={bet_side} win={result_win}"
+            )
+            return True
+        except Exception as ex:
+            self.log(f"[ROUNDS] lỗi gửi ảnh KQ: {ex}")
+            return False
+
+    async def _chain_slot_rounds(self, entity, send_text, extra, rounds_n):
+        """Ván 2..N trong một ca: hô + ảnh kết quả liên tục, cộng lãi từng ván."""
+        pnl = 0.0
+        parts = []
+        is_virtual = bool(self.config.get("is_virtual"))
+        wait_next = float(self.config.get("ho_listen_timeout_sec") or 90)
+        for n in range(max(0, int(extra))):
+            hand_no = n + 2
+            self.log(f"[ROUNDS] Ván {hand_no}/{rounds_n} hô + ảnh KQ liên tục")
+            bet_side = None
+            outcome_key = None
+            result_shot = None
+            result_win = None
+            stake = 0
+            sid = None
+            if is_virtual:
+                path, table_win, outcome_key, bet_side = pick_virtual_slot_for_rates(
+                    self.session_table,
+                    win_rate=float(self.config.get("win_rate", 0.8)),
+                    loss_rate=float(self.config.get("loss_rate", 0.15)),
+                    tie_rate=float(self.config.get("tie_rate", 0.05)),
+                )
+                if not path or not bet_side or not outcome_key:
+                    self.log("[ROUNDS] Chưa đủ ảnh thắng/thua/hòa — dừng các ván còn lại")
+                    break
+                result_shot, result_win = path, table_win
+            else:
+                nxt = getattr(self, "_pending_vision_sig", None)
+                if not nxt or not nxt.get("betSide"):
+                    self.log(f"[ROUNDS] Chờ lệnh vision ván {hand_no}…")
+                    nxt = await self._wait_next_vision_bet_24(wait_next)
+                if not nxt or not nxt.get("betSide"):
+                    self.log("[ROUNDS] Hết chờ lệnh vision — dừng các ván còn lại")
+                    break
+                self._pending_vision_sig = None
+                bet_side = nxt["betSide"]
+                try:
+                    self._last_vision_ho_at = int(nxt.get("hoAt") or time.time() * 1000)
+                except (TypeError, ValueError):
+                    self._last_vision_ho_at = int(time.time() * 1000)
+                sid = nxt.get("signalId")
+            bet_text, stake, ho_html = build_ho_text_for_config(
+                self.config,
+                bet_side,
+                bot_id=self.bot_id,
+                table_name=self.session_table,
+            )
+            self._round_stake = stake
+            await send_text(
+                bet_text,
+                f"Đã gửi tin HÔ ván {hand_no} {bet_text[:80]}",
+                parse_mode="html" if ho_html or uses_html_messages(self.config) else None,
+            )
+            if not is_virtual and sid:
+                try:
+                    await asyncio.to_thread(
+                        consume_main_ho_signal, sid, f"fwd:{self.bot_id}"
+                    )
+                except Exception:
+                    pass
+            if is_virtual:
+                pass
+            else:
+                after_ho = time.time()
+                settle_wait = int(self.config.get("result_listen_timeout_sec") or 60)
+                deadline = time.time() + settle_wait
+                while time.time() < deadline:
+                    path, win, mtime = get_newest_shot_after(
+                        self.session_table,
+                        after_ho,
+                        include_preview=False,
+                        current_only=True,
+                    )
+                    if path:
+                        result_shot, result_win = path, win
+                        self.log(
+                            f"[KẾT QUẢ THẬT] Capture sau hô: {os.path.basename(path)} "
+                            f"winner={win} age={time.time() - mtime:.1f}s"
+                        )
+                        break
+                    try:
+                        last = int(getattr(self, "_last_vision_ho_at", 0) or 0)
+                        more = fetch_latest_vision_bet(
+                            self.session_table,
+                            self.name_service,
+                            min_ho_at=last + 1,
+                            raw=True,
+                        )
+                        if more and more.get("betSide"):
+                            self._pending_vision_sig = more
+                    except Exception:
+                        pass
+                    await asyncio.sleep(float(self.config.get("result_poll_sec") or 0.15))
+                if not result_shot:
+                    self.log("[ROUNDS] Hết chờ ảnh kết quả — dừng các ván còn lại")
+                    break
+                file_outcome = outcome_from_shot_filename(result_shot)
+                file_win = winner_from_shot_filename(result_shot) or result_win
+                if file_outcome == "TIE" or file_win == "T":
+                    outcome_key, result_win = "TIE", "T"
+                elif file_win in ("B", "P") and bet_side in ("B", "P"):
+                    result_win = file_win
+                    outcome_key = outcome_from_ho_and_winner(bet_side, file_win)
+                else:
+                    outcome_key = file_outcome or "TIE"
+            sent = await self._send_round_result_image(
+                entity,
+                result_shot,
+                outcome_key,
+                bet_side,
+                result_win,
+                is_virtual,
+                stake,
+            )
+            if not sent:
+                break
+            delta = hand_pnl(outcome_key, stake)
+            pnl += delta
+            parts.append(str(outcome_key))
+            self.log(
+                f"[ROUNDS] Ván {hand_no}/{rounds_n} {outcome_key} "
+                f"({'+' if delta > 0 else ''}{_pnl_shown(delta)}) "
+                f"tạm tính {_pnl_shown(pnl)}"
+            )
+        return pnl, parts
+
+    async def _chain_ho_while_pending_24(self, entity, send_text):
+        """Hô liên tục — sau KQ giữ hot-wait BET_OK, không thoát về gap+PRIOR-ROUND."""
+        wait_next = float(self.config.get("ho_listen_timeout_sec") or 75)
+        for chain in range(1, 25):
+            nxt = getattr(self, "_pending_vision_sig", None)
+            if not nxt or not nxt.get("betSide"):
+                # Vision thường đặt vài giây sau KQ; đợi tại chỗ thay vì
+                # continuous gap + BẮT ĐẦU PHIÊN (log đo ~5–7s lệch).
+                if chain == 1:
+                    self.log(
+                        f"[24/24] Hot-wait BET_OK tiếp (timeout {wait_next:.0f}s)…"
+                    )
+                nxt = await self._wait_next_vision_bet_24(wait_next)
+            if not nxt or not nxt.get("betSide"):
+                return
+            self._pending_vision_sig = None
+            bet_side = nxt["betSide"]
+            try:
+                self._last_vision_ho_at = int(
+                    nxt.get("hoAt") or time.time() * 1000
+                )
+            except (TypeError, ValueError):
+                self._last_vision_ho_at = int(time.time() * 1000)
+            sid = nxt.get("signalId")
+            self.log(f"[24/24] CHAIN hô ngay #{chain} → {bet_side}")
+
+            bet_text, stake, ho_html = build_ho_text_for_config(
+                self.config,
+                bet_side,
+                bot_id=self.bot_id,
+                table_name=self.session_table,
+            )
+            self._round_stake = stake
+            t0 = time.time()
+            await send_text(
+                bet_text,
+                f"Đã gửi tin HÔ {bet_text[:80]}",
+                parse_mode="html"
+                if ho_html or uses_html_messages(self.config)
+                else None,
+            )
+            try:
+                delay_s = time.time() - (int(nxt.get("hoAt") or 0) / 1000.0)
+                if delay_s < 120:
+                    self.log(f"[TIMING] BET_OK→hô Tele = {delay_s:.2f}s (chain)")
+            except Exception:
+                pass
+            self.log(f"[TIMING] tin HÔ upload +{time.time() - t0:.2f}s")
+            if sid:
+                try:
+                    await asyncio.to_thread(
+                        consume_main_ho_signal, sid, f"fwd:{self.bot_id}"
+                    )
+                except Exception:
+                    pass
+
+            after_ho = time.time()
+            settle_wait = int(self.config.get("result_listen_timeout_sec") or 60)
+            settle_poll = float(self.config.get("result_poll_sec") or 0.15)
+            result_shot, result_win, outcome_key = None, None, None
+            deadline = time.time() + settle_wait
+            while time.time() < deadline:
+                path, win, mtime = get_newest_shot_after(
+                    self.session_table,
+                    after_ho,
+                    include_preview=False,
+                    current_only=True,
+                )
+                if path:
+                    result_shot, result_win = path, win
+                    self.log(
+                        f"[KẾT QUẢ THẬT] Capture sau hô: {os.path.basename(path)} "
+                        f"winner={win} age={time.time() - mtime:.1f}s"
+                    )
+                    break
+                try:
+                    last = int(getattr(self, "_last_vision_ho_at", 0) or 0)
+                    more = fetch_latest_vision_bet(
+                        self.session_table,
+                        self.name_service,
+                        min_ho_at=last + 1,
+                        raw=True,
+                    )
+                    if more and more.get("betSide"):
+                        self._pending_vision_sig = more
+                except Exception:
+                    pass
+                await asyncio.sleep(settle_poll)
+
+            if not result_shot:
+                self.log("[24/24 CHAIN] hết chờ KQ — dừng chain")
+                return
+
+            file_outcome = outcome_from_shot_filename(result_shot)
+            file_win = winner_from_shot_filename(result_shot) or result_win
+            if file_outcome == "TIE" or file_win == "T":
+                outcome_key, result_win = "TIE", "T"
+            elif file_win in ("B", "P") and bet_side in ("B", "P"):
+                result_win = file_win
+                outcome_key = outcome_from_ho_and_winner(bet_side, file_win)
+            else:
+                outcome_key = file_outcome or "TIE"
+
+            send_path = apply_result_image_crop(
+                self.config, result_shot, is_virtual=False
+            ) or result_shot
+            result_caption = None
+            if not self.config.get("stamp_result_on_image", True):
+                result_caption = build_outcome_caption_for_config(
+                    self.config, outcome_key, stake=stake
+                )
+            else:
+                send_path = stamp_outcome_on_image(
+                    send_path, outcome_key, self.bet_amount_label
+                )
+            style = str(self.config.get("content_style") or "").lower()
+            if style in ("gap_thep", "gap", "martingale"):
+                apply_gap_thep_result(
+                    self.config, self.bot_id, outcome_key, stake or 0
+                )
+            try:
+                await self.tg_send_file(
+                    entity, send_path, caption=result_caption or None
+                )
+                self.log(
+                    f"[24/24 CHAIN] ảnh KQ {outcome_key} "
+                    f"{os.path.basename(send_path)}"
+                )
+            except Exception as ex:
+                self.log(f"[24/24 CHAIN] lỗi gửi KQ: {ex}")
+                return
+            self.log(
+                f"HOÀN THÀNH CA PRIOR-ROUND (THẬT) nhóm {self.group_id} | "
+                f"{outcome_key} (chain #{chain})\n"
+            )
 
     async def execute_round(self, messages_to_send, exclude_tables=None):
         if not self.group_id:
@@ -3598,6 +4491,23 @@ async def launch_bot_round(bot, all_bots, slot_key):
 async def run_bot_slot_rounds(bot, messages, exclude_tables=None):
     """1 mốc lịch = rounds_per_slot lần hô+KQ (mặc định 1)."""
     rounds = max(1, int(bot.config.get("rounds_per_slot") or 1))
+    # Nhóm thật/ảo theo lịch: ván 2..N hô + ảnh KQ liên tục trong cùng ca,
+    # không mở đầu lại và không nghỉ step_delay.
+    if (
+        bot.config.get("flow_prior_round")
+        and not bot.config.get("continuous_mode")
+        and rounds > 1
+    ):
+        bot.log(
+            f"[ROUNDS] Ca {rounds} ván — ván 1 đủ kịch bản, "
+            f"ván sau hô + ảnh kết quả liên tục"
+        )
+        bot.is_running_slot = True
+        try:
+            await bot.execute_round(messages, exclude_tables=exclude_tables)
+        finally:
+            bot.is_running_slot = False
+        return
     gap = float(
         bot.config.get("round_gap_sec")
         or bot.config.get("step_delay")
@@ -3618,43 +4528,67 @@ async def run_bot_slot_rounds(bot, messages, exclude_tables=None):
 
 async def run_continuous_bot(bot, all_bots):
     """
-    Chế độ 24/24: hô → gửi ảnh KQ (crop góc phải dưới) → nghỉ gap → hô tiếp.
-    Không chờ mốc lịch interval_minutes.
+    24/24: hô → ảnh KQ → nếu đã có BET_OK mới thì hô ngay (không chờ gap /
+    không tải lại tin nguồn mỗi vòng — tránh trễ ~5s).
     """
     gap = float(bot.config.get("continuous_gap_sec") or 2)
+    slim = bot.config.get("continuous_slim", True)
+    # Slim: gap chỉ khi idle thật; có pending thì 0.05s (đã có sẵn ở dưới).
+    if slim:
+        gap = min(gap, 0.2)
     bot.log(
         f"[24/24] Bật kéo liên tục — gap {gap}s | crop="
         f"{bot.config.get('result_crop_mode') or 'bottom_right'}"
     )
+    cached_messages = []
     while True:
         try:
             await bot.ensure_connected()
-            source_entity = await bot.resolve_entity(bot.source_username)
-            if not source_entity:
-                bot.log(f"[24/24] Không thấy nguồn @{bot.source_username} — chờ 10s")
-                await asyncio.sleep(10)
-                continue
-            messages = []
-            need = min_source_messages_for_config(bot.config)
-            async for m in bot.client.iter_messages(source_entity, limit=max(need + 4, 20)):
-                messages.append(m)
-            messages.sort(key=lambda x: x.id)
-            if len(messages) < need:
-                bot.log(
-                    f"[24/24] Chưa đủ {need} tin nguồn (có {len(messages)}) — chờ 8s"
-                )
-                await asyncio.sleep(8)
-                continue
+            need_refresh = not cached_messages or not slim
+            if need_refresh:
+                source_entity = await bot.resolve_entity(bot.source_username)
+                if not source_entity:
+                    bot.log(
+                        f"[24/24] Không thấy nguồn @{bot.source_username} — chờ 10s"
+                    )
+                    await asyncio.sleep(10)
+                    continue
+                messages = []
+                need = min_source_messages_for_config(bot.config)
+                async for m in bot.client.iter_messages(
+                    source_entity, limit=max(need + 4, 20)
+                ):
+                    messages.append(m)
+                messages.sort(key=lambda x: x.id)
+                if len(messages) < need:
+                    bot.log(
+                        f"[24/24] Chưa đủ {need} tin nguồn (có {len(messages)}) — chờ 8s"
+                    )
+                    await asyncio.sleep(8)
+                    continue
+                cached_messages = messages
             other_tables = [
                 b.session_table
                 for b in all_bots
                 if b != bot and b.is_running_round and b.session_table
             ]
-            bot.log("[24/24] Bắt đầu vòng hô + gửi KQ…")
-            await run_bot_slot_rounds(bot, messages, other_tables)
+            pending = getattr(bot, "_pending_vision_sig", None)
+            if pending and pending.get("betSide"):
+                bot.log(
+                    f"[24/24] Hô ngay BET_OK sẵn {pending.get('betSide')} "
+                    f"(sau ảnh KQ)"
+                )
+            else:
+                bot.log("[24/24] Bắt đầu vòng hô + gửi KQ…")
+            await run_bot_slot_rounds(bot, cached_messages, other_tables)
         except Exception as e:
             bot.log(f"[24/24] Lỗi vòng: {e}")
-        await asyncio.sleep(max(0.5, gap))
+            cached_messages = []
+        # Có lệnh vision sẵn → không nghỉ gap
+        if getattr(bot, "_pending_vision_sig", None):
+            await asyncio.sleep(0.05)
+        else:
+            await asyncio.sleep(max(0.15, gap) if slim else max(0.5, gap))
 
 
 async def run_single_bot_schedule(bot, all_bots):

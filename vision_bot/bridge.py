@@ -98,14 +98,33 @@ class VisionBridge:
             "resultWinner": winner,
             "nameService": self.name_service,
         }
+        # Vision local + server/forward VPS: đẩy JPEG trong cùng 1 request (không block hô text)
+        upload = str(os.getenv("UPLOAD_SHOTS") or "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if upload and filepath and os.path.isfile(filepath):
+            try:
+                with open(filepath, "rb") as f:
+                    raw = f.read()
+                # Giữ ≤ ~400KB — crop sẵn thường nhỏ; nếu lớn thì vẫn gửi (limit server 12mb)
+                import base64
+
+                payload["imageBase64"] = base64.b64encode(raw).decode("ascii")
+                payload["filename"] = filename
+            except Exception as e:
+                print(f"[Bridge] đọc ảnh upload lỗi: {e}")
         try:
             r = requests.post(
                 f"{self.server_url}/api/notify-screenshot",
                 json=payload,
-                timeout=8,
+                timeout=12 if upload else 8,
             )
             ok = r.status_code < 300
-            print(f"[Bridge] notify-screenshot {winner} → {r.status_code}")
+            tag = "+upload" if upload and "imageBase64" in payload else ""
+            print(f"[Bridge] notify-screenshot {winner}{tag} → {r.status_code}")
             return ok
         except Exception as e:
             print(f"[Bridge] notify-screenshot lỗi: {e}")

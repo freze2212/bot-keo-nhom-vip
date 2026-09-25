@@ -689,6 +689,22 @@ def main():
                     "TIE_OR_TIMER",
                 ):
                     saw_signal = True
+                else:
+                    # Đang dealing / ngồi bàn nhưng chưa có timer xanh → vẫn coi là sống
+                    # (tránh game_stale 60–180s kill Chrome ngay sau vào bàn / báo bàn)
+                    try:
+                        from step_verify import check_on_table
+
+                        on_tbl, _ = check_on_table(frame, config)
+                        if on_tbl:
+                            saw_signal = True
+                    except Exception:
+                        pass
+                    if state_machine.current_state in (
+                        getattr(state_machine, "STATE_DEALING", "DEALING"),
+                        getattr(state_machine, "STATE_BETTING", "BETTING"),
+                    ):
+                        saw_signal = True
 
             state, event = state_machine.update_state(timer_status, result_status)
 

@@ -1,23 +1,26 @@
 @echo off
 chcp 65001 >nul
-title KHOI DONG TOAN BO BOT KEO BCR (LOCAL WINDOWS)
+title KHOI DONG LOCAL — server + vision + forward
 color 0F
 cd /d "%~dp0"
 echo ===================================================
-echo     DANG BAT TOAN BO HE THONG TREN WINDOWS LOCAL
+echo   LOCAL: server + vision Chrome + forward 3 mode
 echo ===================================================
 echo.
-echo [1/2] Dang khoi dong Server...
+echo [1/3] Server + panel...
 start "" "1_CHAY_SERVER.bat"
 timeout /t 3 /nobreak >nul
 
-echo [2/2] Dang mo Google Chrome Python Controller (60 FPS Native)...
-start "" "2_CHAY_PYTHON_SESSION.bat"
+echo [2/3] Vision (Chrome GUI)...
+start "" "CHAY_BOT_VISION_AUTO.bat"
+timeout /t 2 /nobreak >nul
+
+echo [3/3] Forward Tele...
+start "" "3_CHAY_FORWARD_BOT.bat"
 
 echo.
+echo   - Server: 1_CHAY_SERVER
+echo   - Vision: CHAY_BOT_VISION_AUTO
+echo   - Forward: 3_CHAY_FORWARD_BOT
 echo ===================================================
-echo   DA KHOI DONG THANH CONG CAC CUA SO!
-echo   - Cua so 1: Server Backend
-echo   - Cua so 2: Google Chrome That (Dang vao ban)
-echo ===================================================
-timeout /t 5
+timeout /t 4

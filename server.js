@@ -30,7 +30,7 @@ const PORT = process.env.SERVER_PORT || 3201;
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS) || 1000;
 const SERVER_VERBOSE_LOG = process.env.SERVER_VERBOSE_LOG === "true";
 
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({ limit: "12mb" })); // upload ảnh JPEG crop từ vision remote
 app.use(express.static("public"));
 const corsOptions = {
   origin: "*",
@@ -103,15 +103,13 @@ function attachMainHoResult(tableKey, roundNum, normWin, filepath, nameService) 
   const now = Date.now();
   const fresh = (s) => now - Number(s.hoAt || 0) < 180000;
 
-  // Chỉ gắn ảnh vào HO còn sống (<3 phút) — không để HO zombie/cũ cướp capture.
-  let pending = newest(
-    signals.filter((s) => s.consumed && !s.resultCompleted && !s.skipped && matchNs(s) && fresh(s))
+  // CHỈ gắn ảnh vào lệnh ĐÃ HÔ (consumed). Không fallback sang BET_OK mới
+  // chưa hô — nếu không, settlement ván trước đánh resultCompleted → miss hô.
+  const pending = newest(
+    signals.filter(
+      (s) => s.consumed && !s.resultCompleted && !s.skipped && matchNs(s) && fresh(s)
+    )
   );
-  if (!pending) {
-    pending = newest(
-      signals.filter((s) => !s.resultCompleted && !s.skipped && matchNs(s) && fresh(s))
-    );
-  }
   if (!pending) return;
   const savedPath = persistHoScreenshot(pending.signalId, filepath, normWin);
   pending.resultCompleted = true;
@@ -658,6 +656,7 @@ app.post("/api/notify-screenshot", (req, res) => {
     roundNum,
     resultWinner,
     nameService,
+    imageBase64,
   } = req.body || {};
   if (tableName && filename) {
     const raw = String(tableName).trim().toUpperCase();
@@ -667,20 +666,43 @@ app.post("/api/notify-screenshot", (req, res) => {
 
     // Chỉ lưu và phát sóng nếu ĐÚNG là ảnh có kết quả B/P/T hoàn chỉnh
     if (normWin === "B" || normWin === "P" || normWin === "T") {
+      let savedPath = filepath || null;
+      let savedName = filename;
+      // Vision remote: đính kèm base64 → ghi disk trên máy server/forward
+      if (imageBase64 && typeof imageBase64 === "string") {
+        try {
+          const b64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+          const buf = Buffer.from(b64, "base64");
+          if (buf.length > 0 && buf.length < 10 * 1024 * 1024) {
+            const shotDir = path.join(__dirname, "public", "screenshots");
+            fs.mkdirSync(shotDir, { recursive: true });
+            const safe =
+              String(filename || `sexy_${key}_${Date.now()}.jpg`).replace(
+                /[^\w.\-]+/g,
+                "_"
+              );
+            savedName = safe;
+            savedPath = path.join(shotDir, safe);
+            fs.writeFileSync(savedPath, buf);
+          }
+        } catch (e) {
+          console.log(`[API SCREENSHOT UPLOAD] lỗi ghi file: ${e.message || e}`);
+        }
+      }
       const itemData = {
         tableName: key,
-        filename,
-        filepath,
-        url,
+        filename: savedName,
+        filepath: savedPath,
+        url: url || (savedName ? `/screenshots/${savedName}` : null),
         roundNum: roundNum || null,
         resultWinner: normWin,
         nameService: nameService || "NS",
         stampTime: Date.now(),
       };
       latestScreenshots[key] = itemData;
-      attachMainHoResult(key, roundNum, normWin, filepath, nameService);
+      attachMainHoResult(key, roundNum, normWin, savedPath, nameService);
       console.log(
-        `[API SCREENSHOT NOTIFY] ${key} (${nameService || "NS"}) Round #${roundNum}, Winner: ${normWin} -> ${filepath}`
+        `[API SCREENSHOT NOTIFY] ${key} (${nameService || "NS"}) Round #${roundNum}, Winner: ${normWin} -> ${savedPath}`
       );
       io.emit("screenshot_ready", itemData);
     } else {
@@ -731,10 +753,16 @@ app.get("/api/latest-vision-bet", (req, res) => {
   const ns = String(req.query.nameService || "").trim().toUpperCase();
   const maxAgeMs = Number(req.query.maxAgeMs) || 300000;
   const minHoAt = Number(req.query.minHoAt) || 0;
+  // Chỉ bỏ lệnh đã hô (consumed). resultCompleted không chặn hô —
+  // settlement từng cướp BET_OK mới nếu gắn nhầm.
+  const includeUsed =
+    String(req.query.includeUsed || "") === "1" ||
+    String(req.query.includeUsed || "").toLowerCase() === "true";
   const now = Date.now();
   const arr = mainHoSignalsByTable[key] || [];
   const pool = arr.filter((s) => {
     if (s.skipped) return false;
+    if (!includeUsed && s.consumed) return false;
     if (ns && s.nameService && s.nameService !== ns) return false;
     if (now - Number(s.hoAt || 0) > maxAgeMs) return false;
     if (minHoAt && Number(s.hoAt || 0) < minHoAt) return false;

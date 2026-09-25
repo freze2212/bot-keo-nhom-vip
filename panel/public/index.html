@@ -3,225 +3,237 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Bot kéo nhóm — Cổng khách hàng</title>
+  <title>Bảng điều khiển kênh</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --bg: #f4f0e8;
-      --ink: #1c1917;
-      --muted: #78716c;
-      --card: #fffdf8;
-      --line: #e7e0d4;
-      --brand: #0f766e;
-      --brand2: #115e59;
-      --accent: #c2410c;
-      --ok: #15803d;
-      --danger: #b91c1c;
-      --shadow: 0 12px 40px rgba(28, 25, 23, 0.08);
+      --bg: #0c0e12;
+      --ink: #f4f6f8;
+      --muted: #9aa3b2;
+      --card: #161a22;
+      --line: #2a3140;
+      --brand: #3d8bfd;
+      --brand2: #2f6fcc;
+      --accent: #e8a317;
+      --ok: #3ecf8e;
+      --danger: #f07178;
+      --shadow: none;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: "Be Vietnam Pro", system-ui, sans-serif;
-      background:
-        radial-gradient(900px 400px at 10% -10%, #ccfbf1 0%, transparent 50%),
-        radial-gradient(700px 360px at 100% 0%, #ffedd5 0%, transparent 45%),
-        var(--bg);
+      background: var(--bg);
       color: var(--ink);
       min-height: 100vh;
     }
-    .wrap { max-width: 980px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
-    header.app {
-      display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-      margin-bottom: 1.25rem; flex-wrap: wrap;
+    .shell { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: 100vh; }
+    .side {
+      background: #10141b; border-right: 1px solid var(--line);
+      padding: 1.1rem 0.85rem; display: flex; flex-direction: column; gap: 0.35rem;
     }
-    .logo { font-weight: 700; font-size: 1.15rem; letter-spacing: -0.02em; }
+    .logo { font-weight: 700; font-size: 0.95rem; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.35rem 0.55rem 0.9rem; }
     .logo span { color: var(--brand); }
+    .nav-item, .step {
+      display: block; width: 100%; text-align: left;
+      background: transparent; color: var(--muted); border: 0; border-radius: 8px;
+      padding: 0.62rem 0.7rem; font-weight: 500; cursor: pointer;
+    }
+    .nav-item:hover, .step:hover { background: #1c2330; color: var(--ink); }
+    .nav-item.on, .step.on { background: #1c2838; color: var(--ink); }
+    .step .n { display: block; font-size: 0.68rem; letter-spacing: 0.06em; color: var(--brand); font-weight: 600; }
+    .step .t { font-size: 0.88rem; font-weight: 600; }
+    .side .spacer { flex: 1; }
+    .main { padding: 1.25rem 1.4rem 2.5rem; max-width: 1080px; min-width: 0; }
+    header.app { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
     .pill {
       display: inline-flex; align-items: center; gap: 0.4rem;
-      background: #fff; border: 1px solid var(--line); border-radius: 999px;
-      padding: 0.35rem 0.75rem; font-size: 0.8rem; color: var(--muted);
+      background: #12161e; border: 1px solid var(--line); border-radius: 999px;
+      padding: 0.3rem 0.7rem; font-size: 0.78rem; color: var(--muted);
     }
     .pill strong { color: var(--ink); font-weight: 600; }
     .card {
-      background: var(--card); border: 1px solid var(--line); border-radius: 18px;
-      box-shadow: var(--shadow); padding: 1.25rem 1.35rem; margin-bottom: 1rem;
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+      padding: 1.15rem 1.2rem; margin-bottom: 0.9rem;
     }
-    .card h2 { margin: 0 0 0.35rem; font-size: 1.15rem; }
-    .card .sub { margin: 0 0 1rem; color: var(--muted); font-size: 0.9rem; }
-    .steps {
-      display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1.25rem;
-    }
-    @media (max-width: 720px) { .steps { grid-template-columns: 1fr 1fr; } }
-    .step {
-      border: 1px solid var(--line); background: #fff; border-radius: 14px;
-      padding: 0.75rem; cursor: pointer; transition: 0.15s ease;
-    }
-    .step:hover { border-color: #99f6e4; }
-    .step.on { border-color: var(--brand); background: #f0fdfa; box-shadow: inset 0 0 0 1px var(--brand); }
-    .step .n { font-size: 0.72rem; color: var(--brand); font-weight: 700; }
-    .step .t { font-size: 0.86rem; font-weight: 600; margin-top: 0.15rem; }
-    label.f { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.82rem; color: var(--muted); margin-bottom: 0.85rem; }
+    .card h2 { margin: 0 0 0.3rem; font-size: 1.05rem; font-weight: 650; }
+    .card .sub { margin: 0 0 0.9rem; color: var(--muted); font-size: 0.86rem; }
+    .steps { display: none; }
+    label.f { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.75rem; }
     label.f b { color: var(--ink); font-weight: 600; }
     input, select, textarea {
-      border: 1px solid var(--line); border-radius: 12px; padding: 0.7rem 0.85rem;
-      font: inherit; background: #fff; color: var(--ink);
+      border: 1px solid var(--line); border-radius: 8px; padding: 0.62rem 0.75rem;
+      font: inherit; background: #0e1218; color: var(--ink);
     }
-    input:focus, select:focus { outline: 2px solid #99f6e4; border-color: var(--brand); }
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem 1rem; }
+    input:focus, select:focus, textarea:focus { outline: 1px solid var(--brand); border-color: var(--brand); }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem 0.9rem; }
     @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
-    .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; }
     button {
-      border: 0; border-radius: 12px; padding: 0.7rem 1rem; font: inherit; font-weight: 600;
-      cursor: pointer; background: var(--brand); color: #ecfdf5;
+      border: 0; border-radius: 8px; padding: 0.58rem 0.9rem; font: inherit; font-weight: 600;
+      cursor: pointer; background: var(--brand); color: #fff;
     }
     button:hover { background: var(--brand2); }
-    button.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
-    button.danger { background: var(--danger); color: #fff; }
-    button.accent { background: var(--accent); color: #fff7ed; }
-    .hint { font-size: 0.78rem; color: var(--muted); line-height: 1.4; }
+    button.sm { padding: 0.4rem 0.65rem; font-size: 0.8rem; }
+    button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+    button.ghost:hover { background: #1c2330; }
+    button.danger { background: #8f2d34; color: #fff; }
+    button.accent { background: #8a5a10; color: #fff; }
+    .hint { font-size: 0.76rem; color: var(--muted); line-height: 1.4; }
     .hidden { display: none !important; }
-    #gate {
-      min-height: 100vh; display: grid; place-items: center; padding: 1rem;
-    }
+    #gate { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
     .gate-card { width: min(420px, 100%); }
     .toast {
-      position: fixed; right: 1rem; bottom: 1rem; background: var(--ink); color: #fff;
-      padding: 0.85rem 1rem; border-radius: 12px; max-width: 360px; display: none; z-index: 50;
+      position: fixed; right: 1rem; bottom: 1rem; background: #1c2330; color: var(--ink);
+      border: 1px solid var(--line); padding: 0.8rem 0.95rem; border-radius: 10px; max-width: 360px; display: none; z-index: 50;
     }
     .toast.show { display: block; }
-    .toast.err { background: var(--danger); }
+    .toast.err { border-color: var(--danger); }
     .overlay {
-      position: fixed; inset: 0; background: rgba(28, 25, 23, 0.45);
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.62);
       display: none; place-items: center; z-index: 80; padding: 1rem;
     }
     .overlay.show { display: grid; }
     .spinner {
-      width: 42px; height: 42px; border: 3px solid #ccfbf1; border-top-color: var(--brand);
+      width: 36px; height: 36px; border: 3px solid #2a3140; border-top-color: var(--brand);
       border-radius: 50%; animation: spin 0.7s linear infinite; margin: 0 auto 0.85rem;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     .load-box, .modal-box {
-      background: #fffdf8; border: 1px solid var(--line); border-radius: 18px;
-      box-shadow: var(--shadow); padding: 1.5rem 1.35rem; width: min(380px, 100%); text-align: center;
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+      padding: 1.4rem 1.25rem; width: min(400px, 100%); text-align: center; color: var(--ink);
     }
-    .load-box p, .modal-box p { margin: 0; color: var(--muted); font-size: 0.92rem; line-height: 1.45; }
-    .modal-box h3 { margin: 0 0 0.5rem; font-size: 1.15rem; }
+    .load-box p, .modal-box p { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+    .modal-box h3 { margin: 0 0 0.45rem; font-size: 1.05rem; color: var(--ink); }
     .modal-box.ok h3 { color: var(--ok); }
     .modal-box.err h3 { color: var(--danger); }
-    .modal-box .row { justify-content: center; margin-top: 1.1rem; }
-    button:disabled { opacity: 0.55; cursor: not-allowed; }
-    .go-live {
-      margin-top: 1.25rem; padding: 1rem 1.1rem; border-radius: 16px;
-      background: #f0fdfa; border: 1px dashed #99f6e4;
-    }
-    .go-live h3 { margin: 0 0 0.35rem; font-size: 1rem; }
-    .go-live p { margin: 0 0 0.85rem; color: var(--muted); font-size: 0.85rem; }
-    .group-list { display: flex; flex-direction: column; gap: 0.65rem; }
-    .group-item {
-      border: 1px solid var(--line); border-radius: 14px; padding: 0.9rem 1rem;
-      display: flex; justify-content: space-between; gap: 0.75rem; align-items: center; background: #fff;
-    }
-    .group-item.off { opacity: 0.72; background: #f5f5f4; }
-    .tag.pause { background: #fef3c7; color: #92400e; }
-    .tag.ok { background: #dcfce7; color: #166534; }
-    .tag.bad { background: #fee2e2; color: #991b1b; }
-    .tag.unk { background: #e7e5e4; color: #57534e; }
-    .overview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.65rem; margin-bottom: 0.85rem; }
+    .modal-box .row { justify-content: center; margin-top: 1rem; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .go-live { margin-top: 0; padding: 1rem; border-radius: 10px; background: #121820; border: 1px solid var(--line); }
+    .go-live h3 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+    .go-live p { margin: 0 0 0.8rem; color: var(--muted); font-size: 0.84rem; }
+    .group-list { display: flex; flex-direction: column; gap: 0.55rem; }
+    .overview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.55rem; margin-bottom: 0.8rem; }
     @media (max-width: 640px) { .overview-grid { grid-template-columns: 1fr; } }
-    .stat {
-      background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 0.75rem 0.9rem;
-    }
-    .stat .n { font-size: 1.35rem; font-weight: 700; color: var(--brand); }
-    .stat .l { font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; }
-    .admin-lic {
-      background: #292524; border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 0.55rem;
-    }
-    .admin-lic .actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.55rem; }
-    .admin-lic input, .admin-lic select {
-      background: #1c1917; color: #fafaf9; border-color: #44403c; padding: 0.4rem 0.55rem;
-      border-radius: 8px; font-size: 0.82rem;
-    }
-    .ov-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.85rem 0 0.75rem; align-items: center; }
+    .stat { background: #121820; border: 1px solid var(--line); border-radius: 10px; padding: 0.7rem 0.85rem; }
+    .stat .n { font-size: 1.3rem; font-weight: 700; color: var(--ink); }
+    .stat .l { font-size: 0.75rem; color: var(--muted); margin-top: 0.1rem; }
+    .admin-lic { background: #121820; border: 1px solid var(--line); border-radius: 10px; padding: 0.8rem 0.9rem; margin-bottom: 0.5rem; }
+    .admin-lic .actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+    .ov-toolbar { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.75rem 0; align-items: center; }
     .ov-row {
-      border: 1px solid var(--line); border-radius: 14px; padding: 0.95rem 1rem;
-      background: #fff; display: grid; grid-template-columns: 1fr auto; gap: 0.75rem 1rem; align-items: center;
+      border: 1px solid var(--line); border-radius: 10px; padding: 0.85rem 0.95rem;
+      background: #121820; display: grid; grid-template-columns: 1fr auto; gap: 0.7rem 1rem; align-items: center;
     }
-    .ov-row.off { background: #f5f5f4; opacity: 0.9; }
+    .ov-row.off { opacity: 0.62; }
     .ov-row .title { font-weight: 600; display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
-    .ov-row .meta { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; line-height: 1.4; }
-    .ov-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end; }
-    @media (max-width: 640px) {
-      .ov-row { grid-template-columns: 1fr; }
-      .ov-actions { justify-content: flex-start; }
-    }
-    .tag { font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.45rem; border-radius: 999px; }
-    .tag.ao { background: #ffedd5; color: #9a3412; }
-    .tag.that { background: #ccfbf1; color: #115e59; }
-    .msg-grid { display: grid; gap: 0.4rem; max-height: 240px; overflow: auto; margin: 0.75rem 0; }
+    .ov-row .meta { font-size: 0.78rem; color: var(--muted); margin-top: 0.25rem; line-height: 1.4; }
+    .ov-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; }
+    @media (max-width: 640px) { .ov-row { grid-template-columns: 1fr; } .ov-actions { justify-content: flex-start; } }
+    .tag { font-size: 0.68rem; font-weight: 650; letter-spacing: 0.03em; padding: 0.12rem 0.4rem; border-radius: 999px; white-space: nowrap; }
+    .tag.pause { background: #3a2e14; color: #f0c14a; }
+    .tag.ok { background: #143028; color: #7dcea0; }
+    .tag.bad { background: #3a1a1e; color: #f0a0a4; }
+    .tag.unk { background: #242a34; color: #b7c0cc; }
+    .tag.ao { background: #3a2a14; color: #f0c28a; }
+    .tag.that { background: #142838; color: #8ec8f0; }
+    .msg-grid { display: grid; gap: 0.35rem; max-height: 240px; overflow: auto; margin: 0.7rem 0; }
     .msg {
-      border: 1px solid var(--line); border-radius: 10px; padding: 0.55rem 0.7rem;
-      cursor: pointer; background: #fff; font-size: 0.84rem;
+      border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem 0.65rem;
+      cursor: pointer; background: #121820; font-size: 0.84rem; color: var(--ink);
     }
-    .msg:hover { border-color: #5eead4; }
-    .msg.picked { border-color: var(--brand); background: #f0fdfa; }
+    .msg:hover { border-color: #3d5a80; }
+    .msg.picked { border-color: var(--brand); background: #152033; }
     .msg .idx { font-weight: 700; color: var(--brand); margin-right: 0.35rem; }
-    .slots { display: grid; gap: 0.75rem; }
-    .slot {
-      border: 1px dashed #cbd5e1; border-radius: 12px; padding: 0.75rem; background: #fafaf9;
-    }
-    .slot h4 { margin: 0 0 0.35rem; font-size: 0.9rem; }
-    .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; min-height: 2rem; }
+    .slots { display: grid; gap: 0.6rem; }
+    .slot { border: 1px solid var(--line); border-radius: 10px; padding: 0.7rem; background: #121820; }
+    .slot h4 { margin: 0 0 0.3rem; font-size: 0.86rem; }
+    .chips { display: flex; flex-wrap: wrap; gap: 0.3rem; min-height: 1.8rem; }
     .chip {
-      background: #ccfbf1; color: #115e59; border-radius: 999px; padding: 0.25rem 0.55rem;
-      font-size: 0.78rem; font-weight: 600; cursor: pointer;
+      background: #1a2a40; color: #d6e6f5; border-radius: 999px; padding: 0.28rem 0.55rem;
+      font-size: 0.76rem; font-weight: 600; cursor: grab; display: inline-flex; align-items: center; gap: 0.35rem;
     }
-    .chip:hover { background: #99f6e4; }
+    .chip .x { background: transparent; color: #9aa3b2; border: 0; padding: 0 0.15rem; font-size: 0.85rem; cursor: pointer; }
+    .msg { cursor: grab; }
+    .msg.used { display: none; }
+    .slot.over, .msg-grid.over { outline: 1px dashed var(--brand); outline-offset: 2px; }
+    .chips { min-height: 2.4rem; padding: 0.25rem; border-radius: 8px; }
     pre.log {
-      background: #1c1917; color: #e7e5e4; border-radius: 12px; padding: 0.75rem;
+      background: #0a0d12; color: #d5dbe3; border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem;
       font-size: 0.72rem; max-height: 180px; overflow: auto; white-space: pre-wrap;
     }
-    .admin-bar { background: #1c1917; color: #e7e5e4; border-radius: 14px; padding: 1rem; margin-bottom: 1rem; }
+    .admin-bar { background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; margin-bottom: 1rem; min-width: 0; }
+    .admin-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin: 0.85rem 0; }
+    @media (max-width: 800px) { .admin-stats { grid-template-columns: 1fr 1fr; } }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .data-table th, .data-table td { text-align: left; padding: 0.6rem 0.4rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .data-table th { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.03em; white-space: nowrap; }
+    .data-table tr:hover td { background: #121820; }
+    .data-table td.ov-actions { width: 1%; }
+    .data-table .ov-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; justify-content: flex-start; }
+    .data-table .ov-actions button { white-space: nowrap; }
+    .table-wrap { overflow-x: auto; max-width: 100%; }
+    @media (max-width: 980px) {
+      .data-table thead { display: none; }
+      .data-table, .data-table tbody, .data-table tr, .data-table td { display: block; width: auto; }
+      .data-table tr { border-bottom: 1px solid var(--line); padding: 0.65rem 0.15rem; }
+      .data-table td { border: 0; padding: 0.12rem 0; }
+      .data-table td.ov-actions { width: auto; padding-top: 0.4rem; }
+    }
+    .nav-pro { display: none !important; }
+    .tele-tech { display: none !important; }
+    #addOv .modal-box, #licEditOv .modal-box { width: min(460px, 100%); text-align: left; }
   </style>
 </head>
 <body>
   <div id="gate">
     <div class="card gate-card">
-      <h2>Chào bạn</h2>
-      <p class="sub">Nhập mã bạn đã nhận để bắt đầu cấu hình bot.</p>
-      <label class="f"><b>Mã của bạn</b>
-        <input id="loginKey" placeholder="Dán mã vào đây" />
+      <h2>Đăng nhập</h2>
+      <p class="sub">Nhập mã truy cập được cấp để vào bảng điều khiển.</p>
+      <label class="f"><b>Mã truy cập</b>
+        <input id="loginKey" placeholder="Nhập mã" />
       </label>
-      <button type="button" id="btnEnter" style="width:100%;margin-top:0.5rem">Vào</button>
+      <button type="button" id="btnEnter" style="width:100%;margin-top:0.5rem">Tiếp tục</button>
       <p class="hint" id="gateErr" style="color:var(--danger);margin-top:0.75rem"></p>
     </div>
   </div>
 
   <div id="app" class="hidden">
-    <div class="wrap">
+    <div class="shell">
+      <aside class="side">
+        <div class="logo">Điều khiển <span>kênh</span></div>
+        <button type="button" class="nav-item step nav-user on" data-s="1" id="navTele">Tài khoản Telegram</button>
+        <button type="button" class="nav-item nav-user" data-view="0" id="navOverview">Quản lý nhóm</button>
+        <button type="button" class="step nav-pro" data-s="2"><span class="n">02</span><span class="t">Kịch bản phát</span></button>
+        <button type="button" class="step nav-pro" data-s="3"><span class="n">03</span><span class="t">Vận hành</span></button>
+        <div class="spacer"></div>
+        <span class="pill" id="licPill">Quyền —</span>
+        <button type="button" class="ghost" id="btnLogout">Đăng xuất</button>
+      </aside>
+      <div class="main">
       <header class="app">
-        <div class="logo">Bot kéo <span>nhóm</span></div>
-        <div class="row">
-          <span class="pill" id="licPill">License —</span>
-          <button type="button" class="ghost" id="btnLogout">Thoát</button>
+        <div>
+          <div style="font-weight:650">Bảng điều khiển</div>
+          <div class="hint" id="pageHint">Quản lý kênh, phiên và lịch phát.</div>
         </div>
       </header>
 
       <div id="adminBox" class="admin-bar hidden">
         <div class="row" style="justify-content:space-between;align-items:flex-start">
           <div>
-            <strong>Quản lý mã khách</strong>
-            <div class="hint" style="color:#a8a29e;margin-top:0.25rem">
-              Tạo · gia hạn · sửa số nhóm · tắt / xóa mã. Xem mỗi mã đang chạy bao nhiêu nhóm.
+            <strong>Cấp quyền truy cập</strong>
+            <div class="hint" style="margin-top:0.25rem">
+              Tạo mã, gia hạn, điều chỉnh hạn mức kênh, thu hồi quyền.
             </div>
           </div>
           <div class="row">
-            <button type="button" class="accent sm" id="btnStartFw">Bật tất cả bot</button>
-            <button type="button" class="danger sm" id="btnStopFw">Tắt tất cả bot</button>
+            <button type="button" class="accent sm" id="btnStartFw">Khởi chạy hệ thống</button>
+            <button type="button" class="danger sm" id="btnStopFw">Dừng hệ thống</button>
           </div>
         </div>
-        <div class="row" style="margin-top:1rem;align-items:flex-end;flex-wrap:wrap">
+        <div class="admin-stats" id="adminStats"></div>
+        <div class="row" style="margin-top:0.25rem;align-items:flex-end;flex-wrap:wrap">
           <label class="f" style="margin:0;min-width:130px"><b style="color:#e7e5e4">Gói</b>
             <select id="adminPlan">
               <option value="trial">Dùng thử 3 ngày</option>
@@ -235,179 +247,314 @@
           <label class="f" style="margin:0;flex:1;min-width:140px"><b style="color:#e7e5e4">Ghi chú</b>
             <input id="adminNote" placeholder="Tên khách" style="background:#292524;color:#fafaf9;border-color:#44403c" />
           </label>
-          <button type="button" id="btnMakeKey">Tạo mã</button>
-          <button type="button" class="ghost sm" id="btnReloadLic" style="color:#e7e5e4;border-color:#44403c;background:#292524">Làm mới</button>
+          <button type="button" id="btnMakeKey">Cấp mã</button>
+          <button type="button" class="ghost sm" id="btnReloadLic">Tải lại</button>
         </div>
-        <pre class="log" id="adminLog" style="margin-top:0.75rem">Mã vừa tạo hiện ở đây.</pre>
-        <div id="licList" style="margin-top:0.85rem"></div>
+        <pre class="log hidden" id="adminLog"></pre>
+        <div class="row" style="margin-top:0.85rem">
+          <input id="licSearch" placeholder="Tìm tên hoặc mã" style="max-width:220px" />
+          <select id="licFilter">
+            <option value="all">Mọi trạng thái</option>
+            <option value="active">Đang dùng</option>
+            <option value="new">Chưa kích hoạt</option>
+            <option value="off">Đã thu hồi</option>
+            <option value="soon">Sắp hết hạn</option>
+          </select>
+        </div>
+        <div class="table-wrap" id="licList" style="margin-top:0.65rem"></div>
       </div>
 
       <div id="customerWizard">
-      <div id="userOverview" class="card">
+      <div id="userOverview" class="card hidden">
         <h2>Quản lý nhóm</h2>
-        <p class="sub" id="overviewSub">Đang tải…</p>
+        <p class="sub" id="overviewSub">Đang tải dữ liệu…</p>
         <div class="overview-grid" id="overviewStats"></div>
         <div class="ov-toolbar">
-          <button type="button" id="btnAddAo">+ Nhóm ảo</button>
-          <button type="button" class="ghost" id="btnAddThat">+ Nhóm thật</button>
-          <button type="button" class="ghost" id="btnCheckHealth">Kiểm tra tình trạng</button>
-          <button type="button" class="accent" id="btnGoLiveTop">Bật bot</button>
+          <button type="button" id="btnAddOpen">Thêm nhóm</button>
+          <span class="hidden">
+            <button type="button" id="btnAddAo">Thêm kênh mô phỏng</button>
+            <button type="button" id="btnAddThat">Thêm kênh thật</button>
+            <button type="button" id="btnAdd2424">Thêm kênh liên tục</button>
+          </span>
+          <button type="button" class="ghost" id="btnCheckHealth">Kiểm tra nhóm</button>
+          <button type="button" class="accent" id="btnGoLiveTop">Bật các nhóm đang mở</button>
         </div>
         <div id="overviewList" class="group-list"></div>
         <div id="groupEditor" class="hidden" style="margin-top:1rem;border-top:1px solid var(--line);padding-top:1rem">
-          <h3 style="margin:0 0 0.75rem;font-size:1rem" id="geTitle">Sửa nhóm</h3>
+          <h3 style="margin:0 0 0.75rem;font-size:1rem" id="geTitle">Cấu hình kênh</h3>
+          <p class="hint hidden" id="ge2424Badge" style="margin:0 0 0.75rem;padding:0.5rem 0.75rem;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;color:var(--brand2)">
+            <b>Chế độ 24/24</b> — hô liên tục theo vision (không lịch phút). Báo bàn ảnh PREVIEW → nhóm riêng; hô + ảnh KQ crop → nhóm hô.
+          </p>
           <input type="hidden" id="ge_id" />
           <div class="grid2">
             <label class="f"><b>Tên nhóm</b><input id="ge_name" placeholder="VD: VIP ảo 1" /></label>
-            <label class="f"><b>ID nhóm Telegram</b><input id="ge_group_id" placeholder="-100…" />
-              <span class="hint">Mở nhóm trên Telegram → xem thông tin → copy ID.</span>
+            <label class="f"><b id="geGroupIdLabel">ID nhóm Telegram</b><input id="ge_group_id" placeholder="-100…" />
+              <span class="hint" id="geGroupIdHint">Mở nhóm trên Telegram → xem thông tin → copy ID.</span>
             </label>
-            <label class="f"><b>Loại nhóm</b>
+            <label class="f" id="geVirtualWrap"><b>Loại nhóm</b>
               <select id="ge_virtual"><option value="true">Ảo</option><option value="false">Thật</option></select>
             </label>
             <label class="f"><b>Mức cược hiện trên tin</b><input id="ge_bet" value="1000" />
-              <span class="hint">Chữ hiện trên tin, VD: 1000.</span>
+              <span class="hint">Chữ hiện trên tin, VD: 50 hoặc 1000.</span>
             </label>
+            <label class="f" id="geContToggleWrap"><b>Kéo 24/24 (hô liên tục)</b>
+              <select id="ge_continuous"><option value="false">Không — theo lịch</option><option value="true">Có — hô liên tục</option></select>
+            </label>
+          </div>
+          <div class="grid2 hidden" id="geRatesWrap">
+            <label class="f"><b>Tỉ lệ thắng (%)</b><input id="ge_win_rate" type="number" min="0" max="100" value="80" /></label>
+            <label class="f"><b>Tỉ lệ thua (%)</b><input id="ge_loss_rate" type="number" min="0" max="100" value="15" /></label>
+            <label class="f"><b>Tỉ lệ hòa (%)</b>
+              <input id="ge_tie_rate" type="number" min="0" max="100" value="5" />
+              <span class="hint">Chỉ nhóm ảo. Ba số cộng lại bằng 100. Hết ca vẫn cộng trừ theo mức cược.</span>
+            </label>
+          </div>
+          <!-- Lịch ca — chỉ nhóm thật/ảo theo slot -->
+          <div class="grid2" id="geScheduleWrap">
             <label class="f"><b>Cách bao lâu chạy 1 lần?</b>
-              <select id="ge_interval"><option value="2">2 phút</option><option value="5" selected>5 phút</option><option value="10">10 phút</option></select>
+              <select id="ge_interval">
+                <option value="2">2 phút</option>
+                <option value="5" selected>5 phút</option>
+                <option value="10">10 phút</option>
+                <option value="15">15 phút</option>
+                <option value="30">30 phút</option>
+                <option value="60">1 tiếng</option>
+              </select>
             </label>
             <label class="f"><b>Mỗi lần hô mấy ván?</b>
               <select id="ge_rounds"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+              <span class="hint">Ván 2 và 3 hô rồi gửi ảnh kết quả liên tục. Hết ca: thắng cộng mức, thua trừ mức, hòa 0. Thắng 2 thua 1 mức 1000 = +1000.</span>
             </label>
             <label class="f"><b>Bắt đầu lúc</b><input id="ge_start" type="time" value="08:00" /></label>
             <label class="f"><b>Kết thúc lúc</b><input id="ge_end" type="time" value="23:00" /></label>
-            <label class="f"><b>Kéo 24/24 (hô liên tục)</b>
-              <select id="ge_continuous"><option value="false">Không — theo lịch</option><option value="true">Có — hô xong gửi KQ rồi hô tiếp</option></select>
+          </div>
+          <!-- Option gọn cho 24/24 -->
+          <div class="grid2 hidden" id="ge2424Opts">
+            <label class="f"><b>Nghỉ giữa 2 ván (giây)</b>
+              <input id="ge_gap" type="number" min="0.5" max="30" step="0.5" value="0.8" />
+              <span class="hint">Hô + KQ xong → nghỉ → hô tiếp (thường 0.8–2s).</span>
             </label>
-            <label class="f"><b>Nghỉ giữa mỗi ván (giây)</b><input id="ge_gap" type="number" min="0.5" max="30" step="0.5" value="2" /></label>
             <label class="f"><b>Ảnh kết quả</b>
               <select id="ge_crop">
-                <option value="">Mặc định</option>
-                <option value="bottom_right">Crop góc phải dưới (24/24)</option>
-                <option value="left">Crop bỏ trái (ảo cũ)</option>
+                <option value="bottom_right">Crop góc phải dưới</option>
                 <option value="none">Ảnh full</option>
               </select>
             </label>
-            <label class="f"><b>Token BotFather</b> (tuỳ chọn)
-              <input id="ge_token_bot" placeholder="123456:AA… — để trống = gửi bằng user" />
-              <span class="hint">Nhóm 24/24 dùng bot API; mỗi nhóm token riêng, không đụng nhóm khác.</span>
+            <label class="f"><b>Kéo bằng</b>
+              <select id="ge_send_via">
+                <option value="bot">BotFather (token bot)</option>
+                <option value="boss">Boss Tele (userbot)</option>
+              </select>
+            </label>
+            <label class="f" id="geTokenWrap"><b>Token BotFather</b>
+              <input id="ge_token_bot" placeholder="123456:AA…" />
+              <span class="hint">Add bot vào nhóm hô + nhóm báo bàn.</span>
             </label>
           </div>
+          <!-- Thật/ảo theo lịch -->
+          <div class="grid2" id="geThatExtra">
+            <label class="f"><b>Ảnh kết quả</b>
+              <select id="ge_crop_sched">
+                <option value="">Mặc định</option>
+                <option value="none">Ảnh full</option>
+                <option value="left">Crop bỏ trái</option>
+              </select>
+            </label>
+            <label class="f"><b>Kéo bằng</b>
+              <select id="ge_send_via_sched">
+                <option value="boss">Boss Tele (userbot)</option>
+                <option value="bot">BotFather (token bot)</option>
+              </select>
+            </label>
+            <label class="f" id="geTokenWrapSched"><b>Token BotFather</b>
+              <input id="ge_token_bot_sched" placeholder="123456:AA…" />
+            </label>
+          </div>
+          <div id="geScript" style="margin-top:0.85rem">
+            <h4 style="margin:0 0 0.35rem;font-size:0.95rem">Thứ tự tin kéo</h4>
+            <p class="hint" style="margin:0 0 0.65rem">Kéo tin từ danh sách thả vào ô bên dưới. Tin đã thả biến khỏi danh sách. Kéo qua lại giữa các ô để đổi thứ tự. Dấu ✕ trả tin lên trên.</p>
+            <p class="hint" id="msgLocked">Nhập xong Tài khoản Telegram (số điện thoại, API ID, API Hash) rồi mới có mẫu tin.</p>
+            <div id="msgPool">
+            <label class="f"><b>Kênh lấy mẫu tin</b>
+              <input id="source_username" value="frezeit" placeholder="username kênh nguồn" />
+              <span class="hint">Bot copy tin từ kênh này. Đổi kênh thì tải mẫu lại.</span>
+            </label>
+            <select id="scriptGroup" class="hidden"></select>
+            <div class="row">
+              <button type="button" class="ghost" id="btnLoadMsgs">Tải mẫu từ kênh</button>
+            </div>
+            <div class="msg-grid" id="msgGrid"></div>
+            </div>
+            <p class="hint hidden" id="activeSlotLabel">Tin mở đầu</p>
+            <div class="slots">
+              <div class="slot" data-slot="open"><h4>① Tin mở đầu</h4><div class="chips" id="slot_open"></div></div>
+              <div class="slot" data-slot="after" id="slotAfterWrap"><h4>② Tin sau ảnh bàn</h4><div class="chips" id="slot_after"></div></div>
+              <div class="slot" data-slot="win"><h4>③ Khi thắng</h4><div class="chips" id="slot_win"></div></div>
+              <div class="slot" data-slot="loss"><h4>④ Khi thua</h4><div class="chips" id="slot_loss"></div></div>
+              <div class="slot" data-slot="tie"><h4>⑤ Khi hòa</h4><div class="chips" id="slot_tie"></div></div>
+              <div class="slot" data-slot="end"><h4>⑥ Tin kết thúc</h4><div class="chips" id="slot_end"></div></div>
+            </div>
+          </div>
           <div id="geContent" style="margin-top:0.75rem">
-            <h4 style="margin:0 0 0.5rem;font-size:0.95rem">Content hô / kết quả (riêng từng nhóm)</h4>
-            <p class="hint" style="margin:0 0 0.65rem">Placeholder: <code>{side}</code> <code>{side_emoji}</code> <code>{side_label}</code> <code>{stake}</code> <code>{table}</code> <code>{profit}</code> <code>{prev_result}</code>. Để trống = format mặc định.</p>
+            <h4 style="margin:0 0 0.5rem;font-size:0.95rem" id="geContentTitle">Content hô / kết quả</h4>
+            <p class="hint" style="margin:0 0 0.65rem" id="geContentHint">Kiểu đơn giản đã hô sẵn 🔵 CON hoặc 🔴 CÁI kèm mức cược. Template và gấp thếp chỉ hiện khi chọn.</p>
             <div class="grid2">
-              <label class="f"><b>Kiểu hô</b>
+              <label class="f"><b>Kiểu hô CON / CÁI</b>
                 <select id="ge_content_style">
-                  <option value="simple">Đơn giản (CON/CÁI + mức)</option>
-                  <option value="template">Template tự soạn</option>
-                  <option value="gap_thep">Gấp thếp + template</option>
+                  <option value="simple">Có sẵn — 🔵 CON / 🔴 CÁI + mức</option>
+                  <option value="template">Tin tự soạn (icon, chữ riêng)</option>
+                  <option value="gap_thep">Gấp thếp</option>
                 </select>
               </label>
-              <label class="f"><b>Bậc gấp thếp</b> (K)
+              <label class="f"><b>Cách hiện thắng / thua</b>
+                <select id="ge_kq_style">
+                  <option value="caption">Caption dưới ảnh (tự soạn icon)</option>
+                  <option value="stamp">Đóng dấu chữ lên ảnh</option>
+                  <option value="forward" class="opt-fwd">Forward tin thắng/thua từ kênh (không dùng 24/24)</option>
+                </select>
+                <span class="hint" id="geKqHint">24/24: chọn Caption hoặc Stamp — không forward tin kênh.</span>
+              </label>
+              <label class="f hidden" id="geGapLadderWrap"><b>Bậc gấp thếp</b> (K)
                 <input id="ge_gap_ladder" value="50,100,200,400,800" />
-                <span class="hint">Chỉ dùng khi chọn Gấp thếp.</span>
+                <span class="hint">Thua thì lên bậc sau. Thắng về bậc đầu. Chỉ khi chọn Gấp thếp.</span>
               </label>
-              <label class="f" style="grid-column:1/-1"><b>Template hô</b>
-                <textarea id="ge_ho_template" rows="6" placeholder="✅ TAY SAU ĐÁNH: {side_emoji} {side_label}
-🔈ĐẶT CƯỢC: {stake} K
-…"></textarea>
+              <label class="f hidden" id="geDayOpenWrap"><b>Tổng lãi đầu ngày</b> (K)
+                <input id="ge_day_open" type="number" value="8000" />
+                <span class="hint">00:00 về số này. 8 triệu = 8000. Chỉ khi chọn Gấp thếp.</span>
               </label>
-              <label class="f"><b>Caption ảnh KQ</b>
+              <label class="f hidden" id="geHoTplWrap" style="grid-column:1/-1"><b>Tin hô CON / CÁI</b>
+                <textarea id="ge_ho_template" rows="4" placeholder="{side_emoji} {side_label} {stake}"></textarea>
+                <span class="hint">Sẵn có: {side_emoji} {side_label} {stake}. In đậm: &lt;b&gt;chữ&lt;/b&gt;.</span>
+                <button type="button" class="ghost sm" id="btnHoPreset" style="margin-top:0.4rem">Chèn mẫu CON/CÁI có icon</button>
+              </label>
+              <label class="f" id="geCapModeWrap"><b>Caption ảnh KQ</b>
                 <select id="ge_cap_mode">
                   <option value="default">Mặc định THẮNG/THUA/HÒA</option>
-                  <option value="none">Không gửi chữ dưới ảnh</option>
-                  <option value="template">Template tự soạn</option>
+                  <option value="template">Template tự soạn (icon)</option>
+                  <option value="none">Không chữ dưới ảnh</option>
                 </select>
               </label>
-              <label class="f"><b>Stamp chữ lên ảnh?</b>
-                <select id="ge_stamp"><option value="false">Không — caption</option><option value="true">Có — đóng dấu ảnh</option></select>
+              <label class="f hidden" id="geStampLegacyWrap"><b>Stamp (cũ)</b>
+                <select id="ge_stamp"><option value="false">Không</option><option value="true">Có</option></select>
               </label>
-              <label class="f"><b>Caption THẮNG</b><input id="ge_cap_win" placeholder="THẮNG +{stake}" /></label>
-              <label class="f"><b>Caption THUA</b><input id="ge_cap_loss" placeholder="THUA -{stake}" /></label>
-              <label class="f"><b>Caption HÒA</b><input id="ge_cap_tie" placeholder="HÒA 0" /></label>
+              <label class="f" id="geCapWinWrap"><b>Caption THẮNG</b><input id="ge_cap_win" placeholder="🟢 THẮNG +{stake}" /></label>
+              <label class="f" id="geCapLossWrap"><b>Caption THUA</b><input id="ge_cap_loss" placeholder="🔴 THUA -{stake}" /></label>
+              <label class="f" id="geCapTieWrap"><b>Caption HÒA</b><input id="ge_cap_tie" placeholder="⚖️ HÒA 0" /></label>
             </div>
           </div>
           <div id="geBaoBan" class="grid2">
-            <label class="f"><b>Gửi ảnh bàn trước khi hô?</b>
+            <label class="f" id="gePreviewOptWrap"><b>Gửi ảnh bàn trước khi hô?</b>
               <select id="ge_preview"><option value="false">Không</option><option value="true">Có</option></select>
             </label>
-            <label class="f"><b>Gửi ảnh bàn sang nhóm khác?</b><input id="ge_preview_gid" placeholder="Để trống = gửi cùng nhóm" /></label>
+            <label class="f" id="gePreviewGidWrap"><b id="gePreviewGidLabel">ID nhóm báo bàn</b>
+              <input id="ge_preview_gid" placeholder="-100…" />
+              <span class="hint" id="gePreviewGidHint">Để trống = gửi cùng nhóm hô.</span>
+            </label>
           </div>
           <div class="row">
-            <button type="button" id="btnSaveGroup">Lưu nhóm</button>
+            <button type="button" id="btnSaveGroup">Lưu cấu hình</button>
             <button type="button" class="ghost" id="btnCancelGroup">Đóng</button>
-            <button type="button" class="danger" id="btnDelGroup">Xóa nhóm</button>
+            <button type="button" class="danger" id="btnDelGroup">Gỡ kênh</button>
           </div>
         </div>
       </div>
 
-      <div class="steps" id="steps">
-        <div class="step on" data-s="1"><div class="n">BƯỚC 1</div><div class="t">Telegram</div></div>
-        <div class="step" data-s="2"><div class="n">BƯỚC 2</div><div class="t">Chọn tin</div></div>
-        <div class="step" data-s="3"><div class="n">BƯỚC 3</div><div class="t">Lịch &amp; bật</div></div>
-      </div>
+      <div class="steps" id="steps"></div>
 
       <!-- Step 1 -->
       <section class="card" id="s1">
-        <h2>Kết nối Telegram</h2>
-        <p class="sub">Điền số điện thoại và thông tin Telegram của bạn, rồi nhận mã xác nhận về máy.</p>
+        <h2>Tài khoản Telegram</h2>
+        <p class="sub">Làm bước này trước. Điền API ID, API Hash và số điện thoại, bấm Lưu phiên, rồi Gửi mã. Xong thì sang Quản lý nhóm.</p>
         <div class="grid2">
-          <label class="f"><b>Tên gọi</b><input id="display_name" placeholder="VD: Shop A" /></label>
+          <label class="f"><b>Tên gọi</b><input id="display_name" placeholder="Tên của bạn" /></label>
           <label class="f"><b>Số điện thoại</b><input id="phone" placeholder="+84…" /></label>
           <label class="f"><b>API ID</b><input id="api_id" placeholder="Lấy tại my.telegram.org" /></label>
           <label class="f"><b>API Hash</b><input id="api_hash" placeholder="Lấy tại my.telegram.org" /></label>
-          <label class="f"><b>Mật khẩu 2 lớp</b> (nếu có)<input id="twofa" type="password" /></label>
-          <label class="f"><b>Kênh lấy mẫu tin</b><input id="source_username" value="frezeit" /></label>
+          <label class="f"><b>Mật khẩu 2 lớp</b> (nếu Telegram có hỏi)<input id="twofa" type="password" /></label>
         </div>
         <div class="row">
-          <button type="button" id="btnSaveTele">Lưu</button>
-          <button type="button" class="ghost" id="btnSendOtp">Gửi mã xác nhận</button>
-          <input id="otp" placeholder="Mã Telegram gửi về" style="max-width:160px" />
+          <button type="button" id="btnSaveTele">Lưu phiên</button>
+          <button type="button" class="ghost" id="btnSendOtp">Gửi mã</button>
+          <input id="otp" placeholder="Mã từ Telegram" style="max-width:160px" />
           <button type="button" class="accent" id="btnConfirmOtp">Xác nhận</button>
         </div>
-        <p class="hint" style="margin-top:0.75rem">Chỉ cần xác nhận một lần. Xong thì thêm nhóm ở khung Quản lý phía trên.</p>
+        <p class="hint" style="margin-top:0.75rem">Sau khi nhập mã thành công, mở Quản lý nhóm để tạo nhóm kéo.</p>
       </section>
 
       <!-- Step 2: messages -->
       <section class="card hidden" id="s2">
-        <h2>Chọn tin nhắn sẽ gửi</h2>
-        <p class="sub">Chọn nhóm → tải tin mẫu → bấm ô bên dưới → bấm tin muốn gắn.</p>
-        <label class="f"><b>Nhóm đang xếp tin</b>
-          <select id="scriptGroup"></select>
-        </label>
-        <div class="row">
-          <button type="button" class="ghost" id="btnLoadMsgs">Tải tin mẫu</button>
-        </div>
-        <div class="msg-grid" id="msgGrid"></div>
-        <p class="hint">Đang gắn tin cho: <strong id="activeSlotLabel">—</strong></p>
-        <div class="slots">
-          <div class="slot" data-slot="open"><h4>① Tin mở đầu</h4><div class="chips" id="slot_open"></div></div>
-          <div class="slot" data-slot="after" id="slotAfterWrap"><h4>② Tin sau khi gửi ảnh bàn</h4><div class="chips" id="slot_after"></div></div>
-          <div class="slot" data-slot="win"><h4>③ Khi thắng</h4><div class="chips" id="slot_win"></div></div>
-          <div class="slot" data-slot="loss"><h4>④ Khi thua</h4><div class="chips" id="slot_loss"></div></div>
-          <div class="slot" data-slot="tie"><h4>⑤ Khi hòa</h4><div class="chips" id="slot_tie"></div></div>
-          <div class="slot" data-slot="end"><h4>⑥ Tin kết thúc</h4><div class="chips" id="slot_end"></div></div>
-        </div>
-        <div class="row" style="margin-top:1rem">
-          <button type="button" id="btnSaveScript">Lưu kịch bản</button>
-        </div>
+        <h2>Kịch bản phát</h2>
+        <p class="sub">Thứ tự tin chỉnh trong Tùy chỉnh của nhóm thật hoặc nhóm ảo.</p>
       </section>
 
       <!-- Step 3: go live -->
       <section class="card hidden" id="s3">
-        <h2>Bật bot</h2>
-        <p class="sub">Lịch từng nhóm chỉnh trong <b>Quản lý nhóm</b> (nút Sửa). Xong thì bật bot bên dưới.</p>
+        <h2>Vận hành</h2>
+        <p class="sub">Lịch từng kênh chỉnh trong Danh sách kênh. Khởi chạy khi cấu hình đã đủ.</p>
         <div class="go-live" style="margin-top:0">
-          <h3>Bắt đầu kéo tin</h3>
-          <p>Bot sẽ chạy theo lịch từng nhóm bạn đã bật.</p>
-          <button type="button" class="accent" id="btnGoLive">Bật bot ngay</button>
+          <h3>Khởi chạy theo lịch</h3>
+          <p>Hệ thống phát theo lịch và trạng thái từng kênh đã kích hoạt.</p>
+          <button type="button" class="accent" id="btnGoLive">Khởi chạy</button>
         </div>
       </section>
       </div><!-- /customerWizard -->
+      </div><!-- /main -->
+    </div><!-- /shell -->
+  </div>
+  <div class="overlay" id="addOv">
+    <div class="modal-box">
+      <h3>Thêm nhóm</h3>
+      <p>Chọn loại, dán ID nhóm. Mẫu tin đã có sẵn.</p>
+      <label class="f"><b>Loại nhóm</b>
+        <select id="addKind">
+          <option value="real">Nhóm thật — kéo theo giờ</option>
+          <option value="virtual">Nhóm ảo — kết quả soạn sẵn</option>
+          <option value="allday">Nhóm 24/24 — chạy cả ngày</option>
+        </select>
+        <span class="hint">Thật: hô theo lịch, kết quả lấy từ bàn. Ảo: hô theo lịch, kết quả soạn sẵn. 24/24: hô liên tục cả ngày.</span>
+      </label>
+      <label class="f"><b>Tên gọi</b><input id="addName" placeholder="Ví dụ: Nhóm VIP" /></label>
+      <label class="f"><b>ID nhóm nhận tin</b>
+        <input id="addGid" placeholder="-100…" />
+        <span class="hint">Mở nhóm trên Telegram, xem thông tin, chép số bắt đầu bằng -100.</span>
+      </label>
+      <label class="f hidden" id="addBaoWrap"><b>ID nhóm nhận ảnh bàn</b>
+        <input id="addBao" placeholder="-100… khác nhóm nhận tin" />
+      </label>
+      <div id="addHours">
+        <label class="f"><b>Cách bao lâu chạy 1 lần?</b>
+          <select id="addEvery">
+            <option value="2">2 phút</option>
+            <option value="5" selected>5 phút</option>
+            <option value="10">10 phút</option>
+            <option value="15">15 phút</option>
+            <option value="30">30 phút</option>
+            <option value="60">1 tiếng</option>
+          </select>
+        </label>
+        <div class="grid2">
+          <label class="f"><b>Từ giờ</b><input id="addStart" type="time" value="08:00" /></label>
+          <label class="f"><b>Đến giờ</b><input id="addEnd" type="time" value="23:00" /></label>
+        </div>
+      </div>
+      <div class="row">
+        <button type="button" id="addConfirm">Tạo nhóm</button>
+        <button type="button" class="ghost" id="addCancel">Đóng</button>
+      </div>
     </div>
   </div>
-  <div class="toast" id="toast"></div>
+  <div class="overlay" id="licEditOv">
+    <div class="modal-box">
+      <h3>Sửa mã</h3>
+      <p id="licEditKey"></p>
+      <label class="f"><b>Tên khách</b><input id="licEditNote" /></label>
+      <label class="f"><b>Số nhóm tối đa</b><input id="licEditMax" type="number" min="1" max="50" /></label>
+      <div class="row">
+        <button type="button" id="licEditSave">Lưu</button>
+        <button type="button" class="ghost" id="licEditCancel">Đóng</button>
+      </div>
+    </div>
+  </div>
   <div class="overlay" id="loadingOv" aria-live="polite">
     <div class="load-box">
       <div class="spinner"></div>
@@ -501,12 +648,23 @@
     }
 
     function showStep(n) {
+      const ov = $("userOverview");
+      if (ov) ov.classList.toggle("hidden", n !== 0);
       [1, 2, 3].forEach((i) => {
         const sec = $("s" + i);
         if (sec) sec.classList.toggle("hidden", i !== n);
         const step = document.querySelector(`.step[data-s="${i}"]`);
         if (step) step.classList.toggle("on", i === n);
       });
+      const nav = $("navOverview");
+      if (nav) nav.classList.toggle("on", n === 0);
+      const hints = {
+        0: "Thêm nhóm, bật tắt, và kéo thứ tự tin.",
+        1: "Điền API ID, API Hash, số điện thoại, rồi gửi mã. Làm xong mới có mẫu tin.",
+        2: "Gán mẫu nguồn vào từng vị trí kịch bản.",
+        3: "Khởi chạy khi cấu hình kênh đã đủ.",
+      };
+      if ($("pageHint")) $("pageHint").textContent = hints[n] || hints[0];
     }
 
     function toggleGroup(id, currentlyOn) {
@@ -561,14 +719,18 @@
       }, { modalOk: { title: "Đã xóa", msg: "Nhóm đã bị xóa." } });
     }
 
+    function escHtml(s) {
+      return String(s || "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    }
     function healthTag(g) {
       const st = g.status || { code: g.enabled === false ? "paused" : (g.health || "unknown"), label: "" };
       const code = st.code || "unknown";
       if (code === "ok") return `<span class="tag ok">${st.label || "Đang ổn"}</span>`;
       if (code === "paused") return `<span class="tag pause">${st.label || "Tạm dừng"}</span>`;
+      if (code === "slow") return `<span class="tag pause">${st.label || "Giới hạn tốc độ"}</span>`;
       if (code === "banned" || code === "no_access" || code === "error")
         return `<span class="tag bad">${st.label || "Lỗi"}</span>`;
-      return `<span class="tag unk">${st.label || "Chưa kiểm tra"}</span>`;
+      return `<span class="tag unk">${st.label || "Chưa phát"}</span>`;
     }
 
     function renderOverview() {
@@ -578,17 +740,21 @@
       const total = (summary && summary.total) || ((tenant && tenant.groups) || []).length;
       const running = (summary && summary.running) || 0;
       const problem = (summary && summary.problem) || 0;
-      $("overviewSub").textContent = summary && summary.at_limit
-        ? `Đã đủ ${maxG} nhóm theo gói — không thêm được nữa.`
-        : `Tối đa ${maxG} nhóm · Bật / dừng / sửa ngay tại đây.`;
+      const phoneOk = !!(tenant && String(tenant.phone || "").trim() && String(tenant.api_id || "").trim() && String(tenant.api_hash || "").trim());
+      const nGroups = ((tenant && tenant.groups) || []).length;
+      $("overviewSub").textContent = !phoneOk
+        ? "Việc tiếp theo: mở Tài khoản Telegram, điền API ID, API Hash, số điện thoại rồi gửi mã."
+        : !nGroups
+          ? "Việc tiếp theo: bấm Thêm nhóm, dán ID nhóm Telegram."
+          : "Bật nhóm cần chạy. Nếu gửi lỗi, cách xử lý hiện ngay trên dòng nhóm.";
       $("overviewStats").innerHTML = `
-        <div class="stat"><div class="n">${running}</div><div class="l">Đang chạy</div></div>
-        <div class="stat"><div class="n">${total}/${maxG}</div><div class="l">Đã thêm / giới hạn</div></div>
-        <div class="stat"><div class="n">${problem}</div><div class="l">Nhóm có vấn đề</div></div>`;
+        <div class="stat"><div class="n">${running}</div><div class="l">Đang vận hành</div></div>
+        <div class="stat"><div class="n">${total}/${maxG}</div><div class="l">Kênh / hạn mức</div></div>
+        <div class="stat"><div class="n">${problem}</div><div class="l">Cần xử lý</div></div>`;
       const gs = (tenant && tenant.groups) || [];
       const list = $("overviewList");
       if (!gs.length) {
-        list.innerHTML = `<div class="hint">Chưa có nhóm — bấm “+ Nhóm ảo” hoặc “+ Nhóm thật”.</div>`;
+        list.innerHTML = `<div class="hint">Chưa có nhóm. Bấm Thêm nhóm, chọn loại rồi dán ID.</div>`;
       } else {
         list.innerHTML = gs.map((g) => {
           const on = g.enabled !== false;
@@ -596,23 +762,20 @@
             <div>
               <div class="title">
                 <strong>${g.name || "Nhóm"}</strong>
-                <span class="tag ${g.is_virtual ? "ao" : "that"}">${g.is_virtual ? "ẢO" : "THẬT"}</span>
+                <span class="tag ${g.is_virtual ? "ao" : "that"}">${g.is_virtual ? "ẢO" : (g.continuous_mode ? "24/24" : "THẬT")}</span>
                 ${healthTag(g)}
-                <span class="tag ${on ? "ok" : "pause"}">${on ? "ĐANG CHẠY" : "ĐÃ DỪNG"}</span>
+                <span class="tag ${on ? "ok" : "pause"}">${on ? "ĐANG VẬN HÀNH" : "TẠM DỪNG"}</span>
               </div>
               <div class="meta">
-                ID: ${g.group_id || "(chưa có)"}
-                · mỗi ${g.interval_minutes || 5} phút
-                · ${g.rounds_per_slot || 1} ván/lần
-                · ${g.start_time || "08:00"}–${g.end_time || "23:00"}
-                ${g.health_msg ? "<br/>" + g.health_msg : ""}
+                ID phát: ${g.group_id || "(chưa gán)"}
+                ${g.continuous_mode ? ` · liên tục · báo bàn: ${g.table_preview_group_id || "<span style=color:var(--danger)>chưa gán</span>"}` : ` · chu kỳ ${g.interval_minutes || 5} phút · ${g.rounds_per_slot || 1} ván · ${g.start_time || "08:00"}–${g.end_time || "23:00"}<br/>Thứ tự tin: mở ${(g.open_msgs || []).map((n) => Number(n) + 1).join(" → ") || "chưa gắn"} · thắng ${g.win_msg != null ? Number(g.win_msg) + 1 : "—"} · thua ${g.loss_msg != null ? Number(g.loss_msg) + 1 : "—"} · hòa ${g.tie_msg != null ? Number(g.tie_msg) + 1 : "—"} · kết ${(g.end_msgs || []).map((n) => Number(n) + 1).join(" → ") || "—"}`}
+                ${g.health_msg ? "<br/>" + escHtml(g.health_msg).replace(/\n/g, "<br/>") : ""}
               </div>
             </div>
             <div class="ov-actions">
-              <button type="button" class="${on ? "danger" : "accent"} sm" data-toggle="${g.id}" data-on="${on ? "1" : "0"}">${on ? "Dừng" : "Bật"}</button>
-              <button type="button" class="ghost sm" data-edit="${g.id}">Sửa</button>
-              <button type="button" class="ghost sm" data-script="${g.id}">Chọn tin</button>
-              <button type="button" class="danger sm" data-del="${g.id}">Xóa</button>
+              <button type="button" class="${on ? "danger" : "accent"} sm" data-toggle="${g.id}" data-on="${on ? "1" : "0"}">${on ? "Tắt" : "Bật"}</button>
+              <button type="button" class="ghost sm" data-edit="${g.id}">Tùy chỉnh</button>
+              <button type="button" class="danger sm" data-del="${g.id}">Gỡ</button>
             </div>
           </div>`;
         }).join("");
@@ -621,6 +784,8 @@
       const canAdd = !(summary && summary.at_limit);
       if ($("btnAddAo")) $("btnAddAo").disabled = !canAdd;
       if ($("btnAddThat")) $("btnAddThat").disabled = !canAdd;
+      if ($("btnAdd2424")) $("btnAdd2424").disabled = !canAdd;
+      if ($("btnAddOpen")) $("btnAddOpen").disabled = !canAdd;
     }
 
     function renderGroups() {
@@ -638,12 +803,20 @@
       if (!g) return;
       editingGroupId = id;
       $("groupEditor").classList.remove("hidden");
-      $("geTitle").textContent = "Sửa: " + (g.name || id);
+      $("geTitle").textContent = "Cấu hình: " + (g.name || id);
       $("ge_id").value = g.id;
       $("ge_name").value = g.name || "";
       $("ge_group_id").value = g.group_id || "";
       $("ge_virtual").value = g.is_virtual ? "true" : "false";
       $("ge_bet").value = g.bet_amount_label || "1000";
+      const asPct = (n, fallback) => {
+        const x = Number(n);
+        if (!Number.isFinite(x)) return String(fallback);
+        return String(x > 1 ? Math.round(x) : Math.round(x * 100));
+      };
+      if ($("ge_win_rate")) $("ge_win_rate").value = asPct(g.win_rate, 80);
+      if ($("ge_loss_rate")) $("ge_loss_rate").value = asPct(g.loss_rate, 15);
+      if ($("ge_tie_rate")) $("ge_tie_rate").value = asPct(g.tie_rate, 5);
       $("ge_preview").value = g.send_table_preview ? "true" : "false";
       $("ge_preview_gid").value = g.table_preview_group_id || "";
       if ($("ge_interval")) $("ge_interval").value = String(g.interval_minutes || 5);
@@ -651,11 +824,22 @@
       if ($("ge_start")) $("ge_start").value = g.start_time || "08:00";
       if ($("ge_end")) $("ge_end").value = g.end_time || "23:00";
       if ($("ge_continuous")) $("ge_continuous").value = g.continuous_mode ? "true" : "false";
-      if ($("ge_gap")) $("ge_gap").value = String(g.continuous_gap_sec || 2);
-      if ($("ge_crop")) $("ge_crop").value = g.result_crop_mode || (g.continuous_mode ? "bottom_right" : "");
+      if ($("ge_gap")) $("ge_gap").value = String(g.continuous_gap_sec || 0.8);
+      if ($("ge_crop")) $("ge_crop").value = g.result_crop_mode || "bottom_right";
+      if ($("ge_crop_sched")) $("ge_crop_sched").value = g.result_crop_mode || "";
+      const viaVal = g.send_via === "bot" || g.token_bot ? "bot" : "boss";
+      if ($("ge_send_via")) $("ge_send_via").value = viaVal;
+      if ($("ge_send_via_sched")) $("ge_send_via_sched").value = viaVal;
       if ($("ge_token_bot")) $("ge_token_bot").value = g.token_bot || "";
+      if ($("ge_token_bot_sched")) $("ge_token_bot_sched").value = g.token_bot || "";
       if ($("ge_content_style")) $("ge_content_style").value = g.content_style || "simple";
+      if ($("ge_kq_style")) {
+        $("ge_kq_style").value =
+          g.kq_style ||
+          (g.result_via_source_messages ? "forward" : g.stamp_result_on_image ? "stamp" : "caption");
+      }
       if ($("ge_gap_ladder")) $("ge_gap_ladder").value = g.gap_thep_ladder || "50,100,200,400,800";
+      if ($("ge_day_open")) $("ge_day_open").value = String(g.gap_thep_day_open ?? 8000);
       if ($("ge_ho_template")) $("ge_ho_template").value = g.ho_template || "";
       if ($("ge_cap_mode")) $("ge_cap_mode").value = g.outcome_caption_mode || "default";
       if ($("ge_stamp")) $("ge_stamp").value = g.stamp_result_on_image ? "true" : "false";
@@ -663,8 +847,11 @@
       if ($("ge_cap_loss")) $("ge_cap_loss").value = g.outcome_caption_loss || "";
       if ($("ge_cap_tie")) $("ge_cap_tie").value = g.outcome_caption_tie || "";
       toggleBaoBan();
+      syncContinuousUi();
+      if (!(g.continuous_mode && !g.is_virtual)) fillScriptFromGroup(g.id);
       $("groupEditor").scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
+
     function renderLicense() {
       if (!license) { $("licPill").innerHTML = role === "admin" ? "<strong>ADMIN</strong>" : "—"; return; }
       $("licPill").innerHTML = `<strong>${license.label || "Gói"}</strong> · còn ${license.days_left} ngày · tối đa ${license.max_groups} nhóm`;
@@ -674,25 +861,229 @@
       const v = $("ge_virtual").value === "true";
       $("geBaoBan").classList.toggle("hidden", v);
       $("slotAfterWrap").classList.toggle("hidden", v);
+      if ($("geRatesWrap")) $("geRatesWrap").classList.toggle("hidden", !v);
+      syncContinuousUi();
+    }
+
+    function syncContinuousUi() {
+      const cont = $("ge_continuous")?.value === "true";
+      const virt = $("ge_virtual")?.value === "true";
+      const is2424 = cont && !virt;
+
+      if ($("ge2424Badge")) $("ge2424Badge").classList.toggle("hidden", !is2424);
+      if ($("geScheduleWrap")) $("geScheduleWrap").classList.toggle("hidden", is2424);
+      if ($("ge2424Opts")) $("ge2424Opts").classList.toggle("hidden", !is2424);
+      if ($("geThatExtra")) $("geThatExtra").classList.toggle("hidden", is2424 || virt);
+      if ($("geVirtualWrap")) $("geVirtualWrap").classList.toggle("hidden", is2424);
+      if ($("geContToggleWrap")) $("geContToggleWrap").classList.toggle("hidden", is2424);
+
+      if ($("geScript")) $("geScript").classList.toggle("hidden", is2424);
+      if (!is2424 && $("ge_id")?.value) fillScriptFromGroup($("ge_id").value);
+
+      if (virt) {
+        if ($("geBaoBan")) $("geBaoBan").classList.add("hidden");
+        syncSendViaUi();
+        syncKqUi();
+        syncContentUi();
+        return;
+      }
+
+      if ($("geBaoBan")) $("geBaoBan").classList.remove("hidden");
+      if ($("gePreviewOptWrap")) $("gePreviewOptWrap").classList.toggle("hidden", is2424);
+
+      if (is2424) {
+        if ($("ge_preview")) $("ge_preview").value = "true";
+        if ($("ge_crop") && !$("ge_crop").value) $("ge_crop").value = "bottom_right";
+        if ($("gePreviewGidLabel")) $("gePreviewGidLabel").textContent = "ID nhóm báo bàn (bắt buộc)";
+        if ($("gePreviewGidHint")) {
+          $("gePreviewGidHint").textContent =
+            "Ảnh PREVIEW full (không cắt) khi vào bàn / đổi bàn — khác ID nhóm hô.";
+        }
+        if ($("geGroupIdLabel")) $("geGroupIdLabel").textContent = "ID nhóm hô 24/24";
+        if ($("geGroupIdHint")) $("geGroupIdHint").textContent = "Nhóm nhận hô + ảnh KQ crop.";
+        if ($("geContentTitle")) $("geContentTitle").textContent = "Content hô / thắng-thua";
+        if ($("ge_kq_style")?.value === "forward") $("ge_kq_style").value = "caption";
+        const fwdOpt = $("ge_kq_style")?.querySelector('option[value="forward"]');
+        if (fwdOpt) fwdOpt.disabled = true;
+        if ($("geKqHint")) {
+          $("geKqHint").textContent = "24/24 chỉ Caption hoặc Stamp — không forward tin kênh.";
+        }
+      } else {
+        if ($("gePreviewGidLabel")) $("gePreviewGidLabel").textContent = "ID nhóm báo bàn";
+        if ($("gePreviewGidHint")) {
+          $("gePreviewGidHint").textContent = "Để trống = gửi cùng nhóm hô.";
+        }
+        if ($("geGroupIdLabel")) $("geGroupIdLabel").textContent = "ID nhóm Telegram";
+        if ($("geGroupIdHint")) {
+          $("geGroupIdHint").textContent = "Mở nhóm trên Telegram → copy ID.";
+        }
+        if ($("geContentTitle")) $("geContentTitle").textContent = "Content hô / kết quả";
+        const fwdOpt = $("ge_kq_style")?.querySelector('option[value="forward"]');
+        if (fwdOpt) fwdOpt.disabled = false;
+        if ($("geKqHint")) {
+          $("geKqHint").textContent = "Forward dùng đúng tin đã gắn ở Thứ tự tin kéo phía trên.";
+        }
+      }
+      syncSendViaUi();
+      syncKqUi();
+      syncContentUi();
+    }
+
+    function syncSendViaUi() {
+      const cont = $("ge_continuous")?.value === "true";
+      const virt = $("ge_virtual")?.value === "true";
+      const is2424 = cont && !virt;
+      if (is2424) {
+        const via = $("ge_send_via")?.value || "bot";
+        if ($("geTokenWrap")) $("geTokenWrap").classList.toggle("hidden", via !== "bot");
+      } else {
+        const via = $("ge_send_via_sched")?.value || "boss";
+        if ($("geTokenWrapSched")) $("geTokenWrapSched").classList.toggle("hidden", via !== "bot");
+      }
+    }
+
+    function syncContentUi() {
+      const style = $("ge_content_style")?.value || "simple";
+      const gap = style === "gap_thep";
+      const custom = style === "template" || gap;
+      if ($("geGapLadderWrap")) $("geGapLadderWrap").classList.toggle("hidden", !gap);
+      if ($("geDayOpenWrap")) $("geDayOpenWrap").classList.toggle("hidden", !gap);
+      if ($("geHoTplWrap")) $("geHoTplWrap").classList.toggle("hidden", !custom);
+      if ($("geContentHint")) {
+        $("geContentHint").textContent = gap
+          ? "Gấp thếp đổi mức sau mỗi ván thua. 00:00 đưa tổng lãi về số đầu ngày. 8 triệu = 8000."
+          : custom
+            ? "Tin hô dùng chữ bạn soạn. {side_emoji} là 🔵 hoặc 🔴, {side_label} là CON hoặc CÁI, {stake} là mức."
+            : "Nhóm thật và nhóm ảo hô sẵn 🔵 CON hoặc 🔴 CÁI kèm mức. Không cần bậc gấp, lãi đầu ngày hay template.";
+      }
+      if (gap && $("ge_day_open") && !Number($("ge_day_open").value)) {
+        $("ge_day_open").value = "8000";
+      }
+      if (custom && $("ge_ho_template") && !$("ge_ho_template").value.trim()) {
+        $("ge_ho_template").value = "{side_emoji} <b>{side_label} {stake}</b>";
+      }
+    }
+
+    function syncKqUi() {
+      const kq = $("ge_kq_style")?.value || "caption";
+      const showCap = kq === "caption";
+      ["geCapModeWrap", "geCapWinWrap", "geCapLossWrap", "geCapTieWrap"].forEach((id) => {
+        const el = $(id);
+        if (el) el.classList.toggle("hidden", !showCap);
+      });
+      if (kq === "caption" && $("ge_cap_mode") && $("ge_cap_mode").value === "none") {
+        $("ge_cap_mode").value = "template";
+      }
+      if ($("ge_stamp")) {
+        $("ge_stamp").value = kq === "stamp" ? "true" : "false";
+      }
+    }
+
+    function teleReady() {
+      return !!(tenant
+        && String(tenant.phone || "").trim()
+        && String(tenant.api_id || "").trim()
+        && String(tenant.api_hash || "").trim());
+    }
+
+    function syncMsgPool() {
+      const ok = teleReady();
+      if ($("msgLocked")) $("msgLocked").classList.toggle("hidden", ok);
+      if ($("msgPool")) $("msgPool").classList.toggle("hidden", !ok);
+    }
+
+    const SLOT_ALL = ["slot_open", "slot_after", "slot_win", "slot_loss", "slot_tie", "slot_end"];
+    const SLOT_MULTI = { slot_open: true, slot_after: true, slot_end: true };
+
+    function chipLabel(i) {
+      const m = messages.find((x) => Number(x.index) === Number(i));
+      const n = Number(i) + 1;
+      if (!m) return "Tin " + n;
+      const t = String(m.text || (m.has_media ? "có ảnh" : "không chữ")).replace(/\s+/g, " ").slice(0, 42);
+      return "Tin " + n + (t ? " · " + t : "");
     }
 
     function chips(elId, arr, multi) {
       const el = $(elId);
       const a = Array.isArray(arr) ? arr : (arr == null || arr === "" ? [] : [arr]);
       el.innerHTML = a.length
-        ? a.map((i) => `<span class="chip" data-i="${i}">Tin #${i} ✕</span>`).join("")
-        : `<span class="hint">Chưa chọn — bấm ô này rồi chọn tin bên trên</span>`;
-      el.querySelectorAll(".chip").forEach((c) => {
-        c.onclick = (e) => {
+        ? a.map((i) => `<span class="chip" draggable="true" data-i="${i}" data-from="${elId}">${escHtml(chipLabel(i))} <button type="button" class="x" data-x="${i}">✕</button></span>`).join("")
+        : `<span class="hint drop-hint">Kéo tin vào đây</span>`;
+      el.querySelectorAll(".x").forEach((b) => {
+        b.onclick = (e) => {
           e.stopPropagation();
-          const i = Number(c.getAttribute("data-i"));
-          if (multi) {
-            const next = a.filter((x) => x !== i);
-            setSlot(elId, next);
-          } else setSlot(elId, []);
+          e.preventDefault();
+          const i = Number(b.getAttribute("data-x"));
+          setSlot(elId, readSlot(elId).filter((x) => x !== i));
           renderChipsAll();
+          renderMsgs();
         };
       });
+      el.querySelectorAll(".chip").forEach((c) => {
+        c.ondragstart = (e) => {
+          e.stopPropagation();
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", JSON.stringify({ i: Number(c.getAttribute("data-i")), from: elId }));
+        };
+      });
+    }
+
+    function placeIndex(idx, toSlot, beforeIdx) {
+      SLOT_ALL.forEach((id) => setSlot(id, readSlot(id).filter((x) => x !== idx)));
+      if (!SLOT_MULTI[toSlot]) {
+        setSlot(toSlot, [idx]);
+      } else {
+        const cur = readSlot(toSlot).filter((x) => x !== idx);
+        if (beforeIdx == null || beforeIdx === idx) cur.push(idx);
+        else {
+          const at = cur.indexOf(beforeIdx);
+          if (at < 0) cur.push(idx);
+          else cur.splice(at, 0, idx);
+        }
+        setSlot(toSlot, cur);
+      }
+      renderChipsAll();
+      renderMsgs();
+    }
+
+    function bindSlotDrops() {
+      document.querySelectorAll(".slot").forEach((slot) => {
+        const box = slot.querySelector(".chips");
+        if (!box || box.dataset.dropBound) return;
+        box.dataset.dropBound = "1";
+        const slotId = box.id;
+        box.ondragover = (e) => {
+          e.preventDefault();
+          slot.classList.add("over");
+        };
+        box.ondragleave = () => slot.classList.remove("over");
+        box.ondrop = (e) => {
+          e.preventDefault();
+          slot.classList.remove("over");
+          let data;
+          try { data = JSON.parse(e.dataTransfer.getData("text/plain") || ""); } catch { return; }
+          if (data == null || data.i == null) return;
+          const chip = e.target.closest ? e.target.closest(".chip") : null;
+          const before = chip ? Number(chip.getAttribute("data-i")) : null;
+          placeIndex(Number(data.i), slotId, before);
+        };
+      });
+      const grid = $("msgGrid");
+      if (grid && !grid.dataset.dropBound) {
+        grid.dataset.dropBound = "1";
+        grid.ondragover = (e) => { e.preventDefault(); grid.classList.add("over"); };
+        grid.ondragleave = () => grid.classList.remove("over");
+        grid.ondrop = (e) => {
+          e.preventDefault();
+          grid.classList.remove("over");
+          let data;
+          try { data = JSON.parse(e.dataTransfer.getData("text/plain") || ""); } catch { return; }
+          if (data == null || data.i == null) return;
+          SLOT_ALL.forEach((id) => setSlot(id, readSlot(id).filter((x) => x !== Number(data.i))));
+          renderChipsAll();
+          renderMsgs();
+        };
+      }
     }
 
     function getSlotArr(elId) {
@@ -725,23 +1116,21 @@
       setSlot("slot_end", g.end_msgs || []);
       $("slotAfterWrap").classList.toggle("hidden", !!g.is_virtual);
       renderChipsAll();
+      renderMsgs();
+      syncMsgPool();
     }
 
     function renderMsgs() {
-      $("msgGrid").innerHTML = messages.map((m) => `
-        <div class="msg" data-i="${m.index}">
-          <span class="idx">${Number(m.index) + 1}</span>${m.has_media ? "📎 " : ""}${(m.text || "(không chữ)").replace(/</g,"&lt;")}
-        </div>`).join("") || `<div class="hint">Chưa có tin — bấm “Tải tin mẫu”.</div>`;
+      const used = new Set(SLOT_ALL.flatMap((id) => readSlot(id)));
+      const left = messages.filter((m) => !used.has(Number(m.index)));
+      $("msgGrid").innerHTML = left.map((m) => `
+        <div class="msg" draggable="true" data-i="${m.index}">
+          <span class="idx">${Number(m.index) + 1}</span>${m.has_media ? "📎 " : ""}${escHtml(m.text || "(không chữ)")}
+        </div>`).join("") || `<div class="hint">${messages.length ? "Đã kéo hết tin xuống các ô." : "Chưa có mẫu. Bấm Tải mẫu từ kênh."}</div>`;
       $("msgGrid").querySelectorAll(".msg").forEach((el) => {
-        el.onclick = () => {
-          const i = Number(el.getAttribute("data-i"));
-          const map = { open: "slot_open", after: "slot_after", win: "slot_win", loss: "slot_loss", tie: "slot_tie", end: "slot_end" };
-          const elId = map[activeSlot];
-          let cur = readSlot(elId);
-          if (["win", "loss", "tie"].includes(activeSlot)) cur = [i];
-          else if (!cur.includes(i)) cur.push(i);
-          setSlot(elId, cur);
-          renderChipsAll();
+        el.ondragstart = (e) => {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", JSON.stringify({ i: Number(el.getAttribute("data-i")), from: "pool" }));
         };
       });
     }
@@ -750,10 +1139,12 @@
       if (role === "admin") {
         $("adminBox").classList.remove("hidden");
         $("customerWizard").classList.add("hidden");
+        document.querySelectorAll(".nav-user").forEach((el) => el.classList.add("hidden"));
         $("licPill").innerHTML = "<strong>ADMIN</strong>";
         await loadLicenses();
         return;
       }
+      document.querySelectorAll(".nav-user").forEach((el) => el.classList.remove("hidden"));
       $("adminBox").classList.add("hidden");
       $("customerWizard").classList.remove("hidden");
       const j = await api("/tenant");
@@ -768,116 +1159,145 @@
       $("source_username").value = tenant.source_username || "frezeit";
       renderLicense();
       renderGroups();
+      syncMsgPool();
     }
 
     function licStatusText(l) {
       return l.status || (!l.enabled ? "đã tắt" : !l.activated_at ? "chưa dùng" : "đang dùng");
     }
 
-    async function loadLicenses() {
-      const j = await api("/licenses");
-      const list = (j.licenses || []).slice().reverse();
+    let licenseCache = [];
+
+    function licBucket(l) {
+      if (l.enabled === false) return "off";
+      if (!l.activated_at) return "new";
+      if (l.days_left != null && Number(l.days_left) <= 3) return "soon";
+      return "active";
+    }
+
+    function renderLicenseTable() {
+      const q = ($("licSearch")?.value || "").trim().toLowerCase();
+      const f = $("licFilter")?.value || "all";
+      const list = licenseCache.filter((l) => {
+        const blob = `${l.note || ""} ${l.key || ""} ${l.tenant_phone || ""}`.toLowerCase();
+        if (q && !blob.includes(q)) return false;
+        if (f === "all") return true;
+        return licBucket(l) === f;
+      });
+      const soonN = licenseCache.filter((l) => licBucket(l) === "soon").length;
+      const onN = licenseCache.filter((l) => l.enabled !== false && l.activated_at).length;
+      const badN = licenseCache.reduce((n, l) => n + (Number(l.groups_problem) || 0), 0);
+      if ($("adminStats")) {
+        $("adminStats").innerHTML = `
+          <div class="stat"><div class="n">${licenseCache.length}</div><div class="l">Tổng mã</div></div>
+          <div class="stat"><div class="n">${onN}</div><div class="l">Đang dùng</div></div>
+          <div class="stat"><div class="n">${soonN}</div><div class="l">Sắp hết hạn</div></div>
+          <div class="stat"><div class="n">${badN}</div><div class="l">Kênh đang lỗi</div></div>`;
+      }
       const el = $("licList");
       if (!list.length) {
-        el.innerHTML = `<div class="hint" style="color:#a8a29e">Chưa có mã — tạo mã ở trên.</div>`;
+        el.innerHTML = `<div class="hint">Không có mã khớp bộ lọc.</div>`;
         return;
       }
-      el.innerHTML = list.map((l) => {
+      const planName = { trial: "3 ngày", week: "1 tuần", month: "1 tháng" };
+      const statusName = { active: "Đang dùng", new: "Chưa kích hoạt", off: "Đã thu hồi", soon: "Sắp hết hạn" };
+      el.innerHTML = `<table class="data-table"><thead><tr>
+        <th>Khách</th><th>Mã</th><th>Gói</th><th>Hết hạn</th><th>Kênh</th><th>Trạng thái</th><th></th>
+      </tr></thead><tbody>${list.map((l) => {
         const on = l.enabled !== false;
-        const exp = l.expires_at ? new Date(l.expires_at).toLocaleDateString("vi-VN") : "chưa kích hoạt";
-        return `<div class="admin-lic" data-key="${l.key}">
-          <div class="row" style="justify-content:space-between;align-items:flex-start">
-            <div style="min-width:0">
-              <code style="color:${on ? "#5eead4" : "#a8a29e"};font-size:0.95rem">${l.key}</code>
-              <div class="hint" style="color:#a8a29e;margin-top:0.25rem;line-height:1.45">
-                ${l.note ? l.note + " · " : ""}${l.plan} · ${licStatusText(l)}
-                ${l.days_left != null ? " · còn " + l.days_left + " ngày" : ""} · hết ${exp}<br/>
-                Nhóm: <b style="color:#fafaf9">${l.groups_running || 0} chạy</b> / ${l.groups_total || 0} đã thêm
-                (max ${l.groups_limit || l.max_groups || "?"})
-                ${l.groups_problem ? " · " + l.groups_problem + " lỗi" : ""}
-                ${l.tenant_phone ? " · " + l.tenant_phone : ""}
-                ${l.at_limit ? " · <span style='color:#fbbf24'>đủ slot</span>" : ""}
-              </div>
-            </div>
-            <button type="button" class="ghost sm" data-copy="${l.key}" style="color:#e7e5e4;border-color:#44403c;background:#1c1917">Copy</button>
-          </div>
-          <div class="actions">
-            <input data-note="${l.key}" value="${(l.note || "").replace(/"/g, "&quot;")}" placeholder="Ghi chú" style="flex:1;min-width:100px" />
-            <input data-max="${l.key}" type="number" min="1" max="50" value="${l.max_groups || 5}" style="width:70px" title="Max nhóm" />
-            <select data-ext="${l.key}">
-              <option value="3">+3 ngày</option>
-              <option value="7" selected>+7 ngày</option>
-              <option value="30">+30 ngày</option>
-            </select>
-            <button type="button" class="sm" data-save="${l.key}">Lưu</button>
-            <button type="button" class="accent sm" data-extend="${l.key}">Gia hạn</button>
-            <button type="button" class="${on ? "danger" : "accent"} sm" data-toggle="${l.key}" data-on="${on ? "1" : "0"}">${on ? "Tắt" : "Bật"}</button>
-            <button type="button" class="danger sm" data-del="${l.key}">Xóa</button>
-          </div>
-        </div>`;
-      }).join("");
+        const exp = l.expires_at ? new Date(l.expires_at).toLocaleDateString("vi-VN") : "—";
+        const bucket = licBucket(l);
+        const left = l.days_left != null ? ` · còn ${l.days_left} ngày` : "";
+        return `<tr>
+          <td><strong>${escHtml(l.note || "—")}</strong><div class="hint">${escHtml(l.tenant_phone || "")}</div></td>
+          <td><code>${escHtml(l.key)}</code></td>
+          <td>${planName[l.plan] || escHtml(l.plan || "")}</td>
+          <td>${exp}${left}</td>
+          <td>${l.groups_running || 0}/${l.groups_limit || l.max_groups || "?"}${l.groups_problem ? ` · ${l.groups_problem} lỗi` : ""}</td>
+          <td><span class="tag ${bucket === "off" || bucket === "soon" ? "pause" : on ? "ok" : "unk"}">${statusName[bucket]}</span></td>
+          <td class="ov-actions"><div class="ov-actions">
+            <button type="button" class="ghost sm" data-copy="${l.key}">Sao chép</button>
+            <button type="button" class="ghost sm" data-editlic="${l.key}">Sửa</button>
+            <button type="button" class="accent sm" data-extend="${l.key}">+7 ngày</button>
+            <button type="button" class="${on ? "danger" : "accent"} sm" data-toggle="${l.key}" data-on="${on ? "1" : "0"}">${on ? "Thu hồi" : "Kích hoạt"}</button>
+            <button type="button" class="danger sm" data-del="${l.key}">Gỡ</button>
+          </div></td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
 
       el.querySelectorAll("[data-copy]").forEach((btn) => {
         btn.onclick = async () => {
           const k = btn.getAttribute("data-copy");
-          try { await navigator.clipboard.writeText(k); toast("Đã copy " + k); }
+          try { await navigator.clipboard.writeText(k); toast("Đã sao chép mã"); }
           catch { showModal(true, "Mã", k); }
         };
       });
-      el.querySelectorAll("[data-save]").forEach((btn) => {
+      el.querySelectorAll("[data-editlic]").forEach((btn) => {
         btn.onclick = () => {
-          const k = btn.getAttribute("data-save");
-          const note = el.querySelector(`[data-note="${k}"]`)?.value || "";
-          const max_groups = Number(el.querySelector(`[data-max="${k}"]`)?.value || 5);
-          withBusy("Đang lưu mã…", async () => {
+          const k = btn.getAttribute("data-editlic");
+          const row = licenseCache.find((x) => x.key === k);
+          $("licEditKey").textContent = k;
+          $("licEditNote").value = row?.note || "";
+          $("licEditMax").value = row?.max_groups || 5;
+          $("licEditOv").classList.add("show");
+          $("licEditSave").onclick = () => withBusy("Đang lưu mã…", async () => {
             const j2 = await api("/licenses/" + encodeURIComponent(k), {
               method: "PUT",
-              body: JSON.stringify({ note, max_groups }),
+              body: JSON.stringify({
+                note: $("licEditNote").value,
+                max_groups: Number($("licEditMax").value || 5),
+              }),
             });
+            $("licEditOv").classList.remove("show");
             await loadLicenses();
             return j2;
-          }, { modalOk: { title: "Đã lưu", msg: "Đã cập nhật ghi chú / số nhóm tối đa." } });
+          }, { modalOk: { title: "Đã lưu", msg: "Đã cập nhật tên khách và số nhóm tối đa." } });
         };
       });
       el.querySelectorAll("[data-extend]").forEach((btn) => {
         btn.onclick = () => {
           const k = btn.getAttribute("data-extend");
-          const days = Number(el.querySelector(`[data-ext="${k}"]`)?.value || 7);
           withBusy("Đang gia hạn…", async () => {
             const j2 = await api("/licenses/" + encodeURIComponent(k) + "/extend", {
               method: "POST",
-              body: JSON.stringify({ days }),
+              body: JSON.stringify({ days: 7 }),
             });
             await loadLicenses();
             return j2;
-          }, { modalOk: { title: "Đã gia hạn", msg: (r) => r.message || "Xong." } });
+          }, { modalOk: { title: "Đã gia hạn", msg: "Đã cộng 7 ngày." } });
         };
       });
       el.querySelectorAll("[data-toggle]").forEach((btn) => {
         btn.onclick = () => {
           const k = btn.getAttribute("data-toggle");
           const currentlyOn = btn.getAttribute("data-on") === "1";
-          withBusy(currentlyOn ? "Đang tắt mã…" : "Đang bật mã…", async () => {
+          withBusy(currentlyOn ? "Đang thu hồi…" : "Đang kích hoạt…", async () => {
             const j2 = await api("/licenses/" + encodeURIComponent(k) + "/toggle", {
               method: "POST",
               body: JSON.stringify({ enabled: !currentlyOn }),
             });
             await loadLicenses();
             return j2;
-          }, { modalOk: { title: currentlyOn ? "Đã tắt" : "Đã bật", msg: (r) => r.message || "Xong." } });
+          }, { modalOk: { title: currentlyOn ? "Đã thu hồi" : "Đã kích hoạt", msg: (r) => r.message || "Xong." } });
         };
       });
       el.querySelectorAll("[data-del]").forEach((btn) => {
         btn.onclick = () => {
           const k = btn.getAttribute("data-del");
-          if (!confirm("Xóa mã " + k + "? Khách sẽ không vào được, nhóm dừng chạy.")) return;
-          withBusy("Đang xóa mã…", async () => {
+          if (!confirm("Gỡ mã " + k + "? Khách sẽ không đăng nhập được.")) return;
+          withBusy("Đang gỡ mã…", async () => {
             const j2 = await api("/licenses/" + encodeURIComponent(k), { method: "DELETE" });
             await loadLicenses();
             return j2;
-          }, { modalOk: { title: "Đã xóa", msg: (r) => r.message || "Đã xóa mã." } });
+          }, { modalOk: { title: "Đã gỡ", msg: "Mã đã bị gỡ." } });
         };
       });
+    }
+
+    async function loadLicenses() {
+      const j = await api("/licenses");
+      licenseCache = (j.licenses || []).slice().reverse();
+      renderLicenseTable();
     }
 
     async function saveTeleQuiet() {
@@ -893,6 +1313,7 @@
       const j = await api("/tenant", { method: "PUT", body: JSON.stringify(body) });
       tenant = j.tenant; license = j.license || license;
       renderLicense();
+      syncMsgPool();
       return j;
     }
 
@@ -913,14 +1334,14 @@
           $("gate").classList.add("hidden");
           $("app").classList.remove("hidden");
           await refreshTenant();
-          showStep(1);
+          showStep(j.role === "admin" ? 0 : 1);
           return j;
         }, {
           modalOk: {
             title: "Đăng nhập thành công",
             msg: (j) => j.role === "admin"
-              ? "Tạo mã rồi gửi cho khách nhé."
-              : "Làm lần lượt các bước rồi bật bot.",
+              ? "Cấp mã và gửi cho khách hàng."
+              : "Làm Tài khoản Telegram trước. Xong thì mở Quản lý nhóm.",
           },
           modalFail: false,
         });
@@ -931,6 +1352,7 @@
 
     $("btnLogout").onclick = () => logout(true);
     document.querySelectorAll(".step").forEach((s) => s.onclick = () => showStep(Number(s.dataset.s)));
+    if ($("navOverview")) $("navOverview").onclick = () => showStep(0);
 
     $("btnSaveTele").onclick = () => withBusy("Đang lưu…", () => saveTeleQuiet(), {
       modalOk: { title: "Đã lưu", msg: "Thông tin đã được lưu." },
@@ -946,29 +1368,113 @@
       if ($("twofa").value) await api("/2fa", { method: "POST", body: JSON.stringify({ password: $("twofa").value }) });
     }, { modalOk: { title: "Xong", msg: "Đã xác nhận. Thêm nhóm ở khung Quản lý phía trên." } });
 
-    async function addGroup(isVirtual) {
+    async function addGroup(isVirtual, continuous, extra) {
       if (summary && summary.at_limit) {
         showModal(false, "Đã đủ nhóm", `Gói chỉ cho tối đa ${summary.max_groups} nhóm. Liên hệ gia hạn để thêm.`);
         return;
       }
+      const is2424 = !!continuous && !isVirtual;
       await withBusy("Đang thêm nhóm…", async () => {
         const j = await api("/tenant/groups", {
           method: "POST",
           body: JSON.stringify({
-            name: isVirtual ? "Nhóm ảo mới" : "Nhóm thật mới",
+            name: (extra && extra.name) || (isVirtual ? "Nhóm theo giờ" : (is2424 ? "Nhóm cả ngày" : "Nhóm theo giờ")),
             is_virtual: isVirtual,
-            send_table_preview: !isVirtual,
+            continuous_mode: is2424,
+            continuous_slim: is2424,
+            continuous_gap_sec: is2424 ? 0.8 : 2,
+            send_table_preview: is2424,
+            result_crop_mode: is2424 ? "bottom_right" : "",
+            send_via: "boss",
+            start_time: (extra && extra.start) || (is2424 ? "00:00" : "08:00"),
+            end_time: (extra && extra.end) || (is2424 ? "23:59" : "23:00"),
+            interval_minutes: is2424 ? 2 : Number((extra && extra.interval) || 5),
+            rounds_per_slot: 1,
+            group_id: (extra && extra.group_id) || "",
+            table_preview_group_id: (extra && extra.preview) || "",
+            content_style: is2424 ? "template" : "simple",
+            kq_style: "caption",
+            outcome_caption_mode: "template",
+            stamp_result_on_image: false,
+            outcome_caption_win: "🟢 THẮNG +{stake}",
+            outcome_caption_loss: "🔴 THUA -{stake}",
+            outcome_caption_tie: "⚖️ HÒA 0",
+            ho_template: is2424
+              ? "✅ TAY SAU ĐÁNH: {side_emoji} {side_label}\n🔈ĐẶT CƯỢC: {stake} K"
+              : "",
+            gap_thep_day_open: is2424 ? 8000 : 0,
           }),
         });
         tenant = j.tenant;
         await refreshTenant();
-        openGroupEditor(j.group.id);
+        if (!is2424) openGroupEditor(j.group.id);
         return j;
-      }, { modalOk: { title: "Đã thêm nhóm", msg: "Điền ID nhóm rồi bấm Lưu." } });
+      }, {
+        modalOk: {
+          title: "Đã thêm nhóm",
+          msg: is2424
+            ? "Nhóm đã sẵn. Bật khi muốn chạy."
+            : "Mở phần Thứ tự tin kéo: tải mẫu, gắn tin mở đầu, sau ảnh bàn, thắng, thua, hòa, kết thúc, rồi Lưu cấu hình.",
+        },
+      });
     }
     $("btnAddAo").onclick = () => addGroup(true);
     $("btnAddThat").onclick = () => addGroup(false);
+    if ($("btnAdd2424")) $("btnAdd2424").onclick = () => addGroup(false, true);
+    function syncAddKind() {
+      const allday = $("addKind")?.value === "allday";
+      $("addBaoWrap")?.classList.toggle("hidden", !allday);
+      $("addHours")?.classList.toggle("hidden", !!allday);
+    }
+    if ($("addKind")) $("addKind").onchange = syncAddKind;
+    if ($("btnAddOpen")) $("btnAddOpen").onclick = () => {
+      $("addOv").classList.add("show");
+      syncAddKind();
+    };
+    if ($("addCancel")) $("addCancel").onclick = () => $("addOv").classList.remove("show");
+    if ($("addConfirm")) $("addConfirm").onclick = async () => {
+      const kind = $("addKind").value;
+      const gid = $("addGid").value.trim();
+      const bao = $("addBao").value.trim();
+      if (!gid.startsWith("-100")) {
+        showModal(false, "Thiếu ID nhóm", "ID nhóm nhận tin phải bắt đầu bằng -100.");
+        return;
+      }
+      if (kind === "allday" && (!bao.startsWith("-100") || bao === gid)) {
+        showModal(false, "Thiếu nhóm ảnh bàn", "Nhóm chạy cả ngày cần thêm ID nhóm nhận ảnh bàn, khác nhóm nhận tin.");
+        return;
+      }
+      $("addOv").classList.remove("show");
+      const extra = {
+        name: $("addName").value.trim(),
+        group_id: gid,
+        preview: kind === "allday" ? bao : "",
+        start: $("addStart").value || "08:00",
+        end: $("addEnd").value || "23:00",
+        interval: Number($("addEvery")?.value || 5),
+      };
+      if (kind === "virtual") await addGroup(true, false, extra);
+      else if (kind === "allday") await addGroup(false, true, extra);
+      else await addGroup(false, false, extra);
+    };
+    if ($("licEditCancel")) $("licEditCancel").onclick = () => $("licEditOv").classList.remove("show");
+    if ($("licSearch")) $("licSearch").oninput = () => { if (licenseCache) renderLicenseTable(); };
+    if ($("licFilter")) $("licFilter").onchange = () => { if (licenseCache) renderLicenseTable(); };
     $("ge_virtual").onchange = toggleBaoBan;
+    if ($("ge_continuous")) $("ge_continuous").onchange = syncContinuousUi;
+    if ($("ge_send_via")) $("ge_send_via").onchange = syncSendViaUi;
+    if ($("ge_send_via_sched")) $("ge_send_via_sched").onchange = syncSendViaUi;
+    if ($("ge_kq_style")) $("ge_kq_style").onchange = syncKqUi;
+    if ($("ge_content_style")) $("ge_content_style").onchange = syncContentUi;
+    if ($("btnHoPreset")) $("btnHoPreset").onclick = () => {
+      if ($("ge_ho_template")) {
+        $("ge_ho_template").value = "{side_emoji} <b>{side_label} {stake}</b>";
+      }
+      if ($("ge_content_style") && $("ge_content_style").value === "simple") {
+        $("ge_content_style").value = "template";
+      }
+      syncContentUi();
+    };
 
     $("btnCheckHealth").onclick = () => withBusy("Đang kiểm tra nhóm trên Telegram…", async () => {
       const j = await api("/tenant/check-health", { method: "POST", body: "{}" });
@@ -1009,34 +1515,79 @@
 
     $("btnSaveGroup").onclick = () => withBusy("Đang lưu nhóm…", async () => {
       const id = $("ge_id").value;
+      const continuous = $("ge_continuous")?.value === "true";
+      const isVirtual = $("ge_virtual").value === "true";
+      const groupId = $("ge_group_id").value.trim();
+      const previewGid = $("ge_preview_gid").value.trim();
+      const is2424 = continuous && !isVirtual;
+      const sendVia = is2424
+        ? ($("ge_send_via")?.value || "bot")
+        : ($("ge_send_via_sched")?.value || "boss");
+      const tokenBot = is2424
+        ? ($("ge_token_bot")?.value || "").trim()
+        : ($("ge_token_bot_sched")?.value || "").trim();
+      const cropMode = is2424
+        ? ($("ge_crop")?.value || "bottom_right")
+        : ($("ge_crop_sched")?.value || "");
+      const kqStyle = $("ge_kq_style")?.value || "caption";
+      if (is2424) {
+        if (!previewGid) {
+          throw new Error("Nhóm 24/24 bắt buộc gắn ID nhóm báo bàn (khác nhóm hô).");
+        }
+        if (previewGid === groupId) {
+          throw new Error("ID nhóm báo bàn phải khác ID nhóm hô 24/24.");
+        }
+      }
+      if (sendVia === "bot" && !tokenBot) {
+        throw new Error("Chọn BotFather thì phải điền Token bot.");
+      }
       const body = {
         name: $("ge_name").value.trim(),
-        group_id: $("ge_group_id").value.trim(),
-        is_virtual: $("ge_virtual").value === "true",
+        group_id: groupId,
+        is_virtual: isVirtual,
         bet_amount_label: $("ge_bet").value.trim(),
-        send_table_preview: $("ge_preview").value === "true",
-        table_preview_group_id: $("ge_preview_gid").value.trim(),
-        interval_minutes: Number($("ge_interval")?.value || 5),
-        rounds_per_slot: Number($("ge_rounds")?.value || 1),
-        start_time: $("ge_start")?.value || "08:00",
-        end_time: $("ge_end")?.value || "23:00",
-        continuous_mode: $("ge_continuous")?.value === "true",
-        continuous_gap_sec: Number($("ge_gap")?.value || 2),
+        win_rate: (Number($("ge_win_rate")?.value) || 0) / 100,
+        loss_rate: (Number($("ge_loss_rate")?.value) || 0) / 100,
+        tie_rate: (Number($("ge_tie_rate")?.value) || 0) / 100,
+        send_table_preview: is2424 ? true : $("ge_preview").value === "true",
+        table_preview_group_id: previewGid,
+        interval_minutes: is2424 ? 2 : Number($("ge_interval")?.value || 5),
+        rounds_per_slot: is2424 ? 1 : Number($("ge_rounds")?.value || 1),
+        start_time: is2424 ? "00:00" : ($("ge_start")?.value || "08:00"),
+        end_time: is2424 ? "23:59" : ($("ge_end")?.value || "23:00"),
+        continuous_mode: continuous,
+        continuous_gap_sec: Number($("ge_gap")?.value || 0.8),
         continuous_slim: true,
-        result_crop_mode: $("ge_crop")?.value || ($("ge_continuous")?.value === "true" ? "bottom_right" : ""),
+        result_crop_mode: cropMode,
         result_crop_right_frac: 0.3,
         result_crop_bottom_frac: 0.3,
         result_crop_right_trim_frac: 0.035,
-        token_bot: ($("ge_token_bot")?.value || "").trim(),
+        send_via: sendVia,
+        token_bot: sendVia === "bot" ? tokenBot : "",
         content_style: $("ge_content_style")?.value || "simple",
+        kq_style: kqStyle,
         gap_thep_ladder: ($("ge_gap_ladder")?.value || "50,100,200,400,800").trim(),
+        gap_thep_day_open: Number($("ge_day_open")?.value || 0),
         ho_template: ($("ge_ho_template")?.value || "").trim(),
-        outcome_caption_mode: $("ge_cap_mode")?.value || "default",
-        stamp_result_on_image: $("ge_stamp")?.value === "true",
+        outcome_caption_mode:
+          kqStyle === "caption"
+            ? ($("ge_cap_mode")?.value || "template")
+            : "none",
+        stamp_result_on_image: kqStyle === "stamp",
+        result_via_source_messages: kqStyle === "forward",
         outcome_caption_win: ($("ge_cap_win")?.value || "").trim(),
         outcome_caption_loss: ($("ge_cap_loss")?.value || "").trim(),
         outcome_caption_tie: ($("ge_cap_tie")?.value || "").trim(),
       };
+      if (!is2424 && $("slot_open")) {
+        body.open_msgs = readSlot("slot_open");
+        body.after_preview_msgs = isVirtual ? [] : readSlot("slot_after");
+        body.win_msg = readSlot("slot_win")[0];
+        body.loss_msg = readSlot("slot_loss")[0];
+        body.tie_msg = readSlot("slot_tie")[0];
+        body.end_msgs = readSlot("slot_end");
+      }
+      if (!is2424 && $("source_username")) await saveTeleQuiet();
       const j = await api("/tenant/groups/" + id, { method: "PUT", body: JSON.stringify(body) });
       tenant = j.tenant;
       $("groupEditor").classList.add("hidden");
@@ -1056,14 +1607,16 @@
     });
 
     $("btnLoadMsgs").onclick = () => withBusy("Đang tải tin mẫu…", async () => {
+      if (!teleReady()) throw new Error("Nhập xong số điện thoại, API ID và API Hash ở Tài khoản Telegram trước.");
       const j = await api("/source/preview", { method: "POST", body: JSON.stringify({ limit: 12 }) });
       messages = j.messages || [];
       renderMsgs();
       return j;
-    }, { modalOk: { title: "Đã tải tin", msg: (j) => "Có " + (j.messages || []).length + " tin. Bấm ô bên dưới rồi bấm tin để gắn." } });
+    }, { modalOk: { title: "Đã tải tin", msg: (j) => "Có " + (j.messages || []).length + " tin. Kéo tin thả vào ô bên dưới." } });
+    bindSlotDrops();
 
     $("scriptGroup").onchange = () => fillScriptFromGroup($("scriptGroup").value);
-    $("btnSaveScript").onclick = () => withBusy("Đang lưu…", async () => {
+    if ($("btnSaveScript")) $("btnSaveScript").onclick = () => withBusy("Đang lưu…", async () => {
       const id = $("scriptGroup").value;
       if (!id) throw new Error("Chọn nhóm trước");
       const body = {
@@ -1079,7 +1632,7 @@
       return j;
     }, { modalOk: { title: "Đã lưu", msg: "Kịch bản tin đã được lưu." } });
 
-    $("btnGoLive").onclick = () => withBusy("Đang bật bot…", async () => {
+    $("btnGoLive").onclick = () => withBusy("Đang khởi chạy…", async () => {
       return api("/tenant/go-live", { method: "POST", body: '{"run_now":true}' });
     }, {
       modalOk: { title: "Bot đã bật", msg: (j) => j.message || "Bot đang chạy." },
@@ -1092,16 +1645,16 @@
       modalOk: { title: "Xong", msg: "Danh sách đã cập nhật." },
     });
 
-    $("btnStartFw").onclick = () => withBusy("Đang bật bot…", async () => {
+    $("btnStartFw").onclick = () => withBusy("Đang khởi chạy hệ thống…", async () => {
       await api("/sync", { method: "POST" });
       const j = await api("/forward/start", { method: "POST", body: '{"run_now":true}' });
       $("adminLog").textContent = "Bot đang chạy.";
       return j;
-    }, { modalOk: { title: "Đã bật", msg: "Tất cả bot đang chạy." } });
+    }, { modalOk: { title: "Đã khởi chạy", msg: "Toàn bộ phiên đang vận hành." } });
 
-    $("btnStopFw").onclick = () => withBusy("Đang tắt bot…", async () => {
+    $("btnStopFw").onclick = () => withBusy("Đang dừng hệ thống…", async () => {
       await api("/forward/stop", { method: "POST", body: "{}" });
-    }, { modalOk: { title: "Đã tắt", msg: "Tất cả bot đã dừng." } });
+    }, { modalOk: { title: "Đã dừng", msg: "Toàn bộ phiên đã dừng." } });
 
     (async function boot() {
       if (!token) return;
@@ -1118,6 +1671,10 @@
           await refreshTenant();
           renderLicense();
           if (tenant) renderGroups();
+          showStep(1);
+          setInterval(() => {
+            refreshTenant().catch(() => {});
+          }, 12000);
         }
       } catch { logout(false); }
     })();

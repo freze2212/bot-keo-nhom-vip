@@ -11,7 +11,7 @@
     "auto_navigate": true,
     "auto_recover": true,
     "auto_login": true,
-    "account_index": 3,
+    "account_index": 1,
     "login_url": "https://www.rr9900.com",
     "login_wait_sec": 5,
     "auto_bet_on_new_round": true,
@@ -20,7 +20,7 @@
     "listen_socket_place_bet": true,
     "server_url": "http://127.0.0.1:3201",
     "name_service": "NS1",
-    "table_name": "C08",
+    "table_name": "C09",
     "table_ocr_interval_sec": 12,
     "capture_dir": "captures/live",
     "game_url": "",
@@ -28,9 +28,9 @@
     "chrome_profile_dir": "chrome_user_data_vision",
     "chrome_boot_wait_sec": 12,
     "recover_no_window_sec": 25,
-    "recover_stale_sec": 60,
+    "recover_stale_sec": 180,
     "recover_cooldown_sec": 45,
-    "settlement_threshold": 4.0,
+    "settlement_threshold": 4,
     "settlement_min_dealing_ms": 800,
     "bet_verify_delay_sec": 0.25,
     "scroll_after_table": true,
@@ -42,7 +42,7 @@
             "name": "close_thong_bao",
             "x": 1565,
             "y": 215,
-            "delay_after": 1.0
+            "delay_after": 1
         }
     ],
     "login_points": {
@@ -64,7 +64,7 @@
         "submit": {
             "x": 1171,
             "y": 797,
-            "delay_after": 6.0
+            "delay_after": 6
         }
     },
     "roi_timer": {
@@ -134,7 +134,7 @@
             "name": "6. Click vào phòng chọn bàn",
             "x": 429,
             "y": 257,
-            "delay_after": 8.0
+            "delay_after": 8
         },
         {
             "name": "7. Click chọn bàn (ngẫu nhiên)",
@@ -196,17 +196,17 @@
         "auto_recover": true,
         "recover_on_bet_miss": true,
         "strict_input": false,
-        "page_std_min": 8.0,
+        "page_std_min": 8,
         "field_delta_min": 0.008,
         "login_ok_wait_sec": 10,
         "login_form_change_min": 0.06,
-        "balance_std_min": 5.0,
+        "balance_std_min": 5,
         "sexy_change_min": 0.02,
-        "lobby_std_min": 12.0,
-        "lobby_color_min": 8.0,
-        "on_table_timeout_sec": 10,
+        "lobby_std_min": 12,
+        "lobby_color_min": 8,
+        "on_table_timeout_sec": 25,
         "page_timeout_sec": 20,
-        "url_wait_sec": 6.0,
+        "url_wait_sec": 6,
         "no_bet_recover_sec": 60
     },
     "capture_top_skip_frac": 0.25,
@@ -284,5 +284,6 @@
         "x": 1749,
         "y": 828
     },
-    "setup_recorded_at": "2026-09-23 23:38:21"
+    "setup_recorded_at": "2026-09-23 23:38:21",
+    "auto_bet": true
 }

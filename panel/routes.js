@@ -250,7 +250,32 @@ router.put("/api/tenant/groups/:gid", (req, res) => {
   if (!t) return res.status(404).json({ ok: false, error: "Không tìm thấy" });
   const idx = (t.groups || []).findIndex((g) => g.id === req.params.gid);
   if (idx < 0) return res.status(404).json({ ok: false, error: "Không có nhóm" });
-  t.groups[idx] = store.defaultGroup({ ...t.groups[idx], ...req.body, id: req.params.gid });
+  const next = store.defaultGroup({ ...t.groups[idx], ...req.body, id: req.params.gid });
+  if (next.continuous_mode && !next.is_virtual) {
+    const hô = String(next.group_id || "").trim();
+    const bao = String(next.table_preview_group_id || "").trim();
+    if (!bao) {
+      return res.status(400).json({
+        ok: false,
+        error: "Nhóm 24/24 bắt buộc gắn ID nhóm báo bàn (khác nhóm hô)",
+      });
+    }
+    if (bao === hô) {
+      return res.status(400).json({
+        ok: false,
+        error: "ID nhóm báo bàn phải khác ID nhóm hô 24/24",
+      });
+    }
+    next.send_table_preview = true;
+  }
+  if (next.send_via === "bot" && !String(next.token_bot || "").trim()) {
+    return res.status(400).json({
+      ok: false,
+      error: "Chọn BotFather thì phải điền Token bot",
+    });
+  }
+  if (next.send_via === "boss") next.token_bot = "";
+  t.groups[idx] = next;
   const saved = store.saveTenant(t);
   store.syncToTeleForward();
   res.json({ ok: true, group: t.groups[idx], tenant: saved });
@@ -314,7 +339,9 @@ router.post("/api/tenant/groups/:gid/toggle", authRequired, async (req, res) => 
       restarted,
       message: enabled
         ? `Đã bật lại “${name}”.`
-        : `Đã tạm dừng “${name}”. Nhóm khác vẫn chạy.`,
+        : restarted
+          ? `Đã tạm dừng “${name}”. Forward đã restart (các nhóm chung process có thể giật ngắn).`
+          : `Đã tạm dừng “${name}”.`,
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
