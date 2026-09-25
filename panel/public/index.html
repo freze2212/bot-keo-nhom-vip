@@ -250,6 +250,12 @@
           <button type="button" id="btnMakeKey">Cấp mã</button>
           <button type="button" class="ghost sm" id="btnReloadLic">Tải lại</button>
         </div>
+        <div class="row" style="margin-top:0.45rem;gap:1rem;align-items:center;flex-wrap:wrap">
+          <span class="hint" style="margin:0">Được tạo</span>
+          <label class="hint" style="margin:0"><input type="checkbox" id="allowReal" checked /> Nhóm thật</label>
+          <label class="hint" style="margin:0"><input type="checkbox" id="allowVirtual" checked /> Nhóm ảo</label>
+          <label class="hint" style="margin:0"><input type="checkbox" id="allow24" checked /> Nhóm 24/24</label>
+        </div>
         <pre class="log hidden" id="adminLog"></pre>
         <div class="row" style="margin-top:0.85rem">
           <input id="licSearch" placeholder="Tìm tên hoặc mã" style="max-width:220px" />
@@ -549,6 +555,13 @@
       <p id="licEditKey"></p>
       <label class="f"><b>Tên khách</b><input id="licEditNote" /></label>
       <label class="f"><b>Số nhóm tối đa</b><input id="licEditMax" type="number" min="1" max="50" /></label>
+      <label class="f"><b>Được tạo</b>
+        <div class="row" style="gap:1rem;flex-wrap:wrap">
+          <label class="hint" style="margin:0"><input type="checkbox" id="licAllowReal" /> Nhóm thật</label>
+          <label class="hint" style="margin:0"><input type="checkbox" id="licAllowVirtual" /> Nhóm ảo</label>
+          <label class="hint" style="margin:0"><input type="checkbox" id="licAllow24" /> Nhóm 24/24</label>
+        </div>
+      </label>
       <div class="row">
         <button type="button" id="licEditSave">Lưu</button>
         <button type="button" class="ghost" id="licEditCancel">Đóng</button>
@@ -824,6 +837,7 @@
       if ($("ge_start")) $("ge_start").value = g.start_time || "08:00";
       if ($("ge_end")) $("ge_end").value = g.end_time || "23:00";
       if ($("ge_continuous")) $("ge_continuous").value = g.continuous_mode ? "true" : "false";
+      lockKindControls(g);
       if ($("ge_gap")) $("ge_gap").value = String(g.continuous_gap_sec || 0.8);
       if ($("ge_crop")) $("ge_crop").value = g.result_crop_mode || "bottom_right";
       if ($("ge_crop_sched")) $("ge_crop_sched").value = g.result_crop_mode || "";
@@ -852,9 +866,66 @@
       $("groupEditor").scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
+    function kindRights(src) {
+      const L = src || license || {};
+      return {
+        real: L.allow_real !== false,
+        virtual: L.allow_virtual !== false,
+        allday: L.allow_24h !== false,
+      };
+    }
+
+    function rightsLabel(src) {
+      const r = kindRights(src);
+      const parts = [];
+      if (r.real) parts.push("Thật");
+      if (r.virtual) parts.push("Ảo");
+      if (r.allday) parts.push("24/24");
+      return parts.join(" · ") || "Không loại nào";
+    }
+
+    function groupKindOfClient(g) {
+      if (g && g.continuous_mode && !g.is_virtual) return "24h";
+      if (g && g.is_virtual) return "virtual";
+      return "real";
+    }
+
+    function lockKindControls(g) {
+      const r = kindRights();
+      const current = groupKindOfClient(g);
+      const virtSel = $("ge_virtual");
+      const contSel = $("ge_continuous");
+      if (virtSel) {
+        [...virtSel.options].forEach((o) => {
+          if (o.value === "true") o.disabled = !r.virtual && current !== "virtual";
+          if (o.value === "false") o.disabled = !r.real && !r.allday && current === "virtual";
+        });
+      }
+      if (contSel) {
+        [...contSel.options].forEach((o) => {
+          if (o.value === "true") o.disabled = !r.allday && current !== "24h";
+          if (o.value === "false") o.disabled = !r.real && current === "24h";
+        });
+      }
+    }
+
+    function fillAddKinds() {
+      const r = kindRights();
+      const sel = $("addKind");
+      if (!sel) return;
+      const cur = sel.value;
+      const opts = [];
+      if (r.real) opts.push(["real", "Nhóm thật — kéo theo giờ"]);
+      if (r.virtual) opts.push(["virtual", "Nhóm ảo — kết quả soạn sẵn"]);
+      if (r.allday) opts.push(["allday", "Nhóm 24/24 — chạy cả ngày"]);
+      sel.innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+      if (opts.some(([v]) => v === cur)) sel.value = cur;
+      syncAddKind();
+    }
+
     function renderLicense() {
       if (!license) { $("licPill").innerHTML = role === "admin" ? "<strong>ADMIN</strong>" : "—"; return; }
-      $("licPill").innerHTML = `<strong>${license.label || "Gói"}</strong> · còn ${license.days_left} ngày · tối đa ${license.max_groups} nhóm`;
+      $("licPill").innerHTML = `<strong>${license.label || "Gói"}</strong> · còn ${license.days_left} ngày · tối đa ${license.max_groups} nhóm · ${rightsLabel(license)}`;
     }
 
     function toggleBaoBan() {
@@ -1211,7 +1282,7 @@
         return `<tr>
           <td><strong>${escHtml(l.note || "—")}</strong><div class="hint">${escHtml(l.tenant_phone || "")}</div></td>
           <td><code>${escHtml(l.key)}</code></td>
-          <td>${planName[l.plan] || escHtml(l.plan || "")}</td>
+          <td>${planName[l.plan] || escHtml(l.plan || "")}<div class="hint">${rightsLabel(l)}</div></td>
           <td>${exp}${left}</td>
           <td>${l.groups_running || 0}/${l.groups_limit || l.max_groups || "?"}${l.groups_problem ? ` · ${l.groups_problem} lỗi` : ""}</td>
           <td><span class="tag ${bucket === "off" || bucket === "soon" ? "pause" : on ? "ok" : "unk"}">${statusName[bucket]}</span></td>
@@ -1239,19 +1310,31 @@
           $("licEditKey").textContent = k;
           $("licEditNote").value = row?.note || "";
           $("licEditMax").value = row?.max_groups || 5;
+          if ($("licAllowReal")) $("licAllowReal").checked = row?.allow_real !== false;
+          if ($("licAllowVirtual")) $("licAllowVirtual").checked = row?.allow_virtual !== false;
+          if ($("licAllow24")) $("licAllow24").checked = row?.allow_24h !== false;
           $("licEditOv").classList.add("show");
           $("licEditSave").onclick = () => withBusy("Đang lưu mã…", async () => {
+            const allow_real = !!$("licAllowReal")?.checked;
+            const allow_virtual = !!$("licAllowVirtual")?.checked;
+            const allow_24h = !!$("licAllow24")?.checked;
+            if (!allow_real && !allow_virtual && !allow_24h) {
+              throw new Error("Chọn ít nhất một loại nhóm: thật, ảo hoặc 24/24.");
+            }
             const j2 = await api("/licenses/" + encodeURIComponent(k), {
               method: "PUT",
               body: JSON.stringify({
                 note: $("licEditNote").value,
                 max_groups: Number($("licEditMax").value || 5),
+                allow_real,
+                allow_virtual,
+                allow_24h,
               }),
             });
             $("licEditOv").classList.remove("show");
             await loadLicenses();
             return j2;
-          }, { modalOk: { title: "Đã lưu", msg: "Đã cập nhật tên khách và số nhóm tối đa." } });
+          }, { modalOk: { title: "Đã lưu", msg: "Đã cập nhật tên khách, số nhóm và loại nhóm được tạo." } });
         };
       });
       el.querySelectorAll("[data-extend]").forEach((btn) => {
@@ -1374,6 +1457,19 @@
         return;
       }
       const is2424 = !!continuous && !isVirtual;
+      const r = kindRights();
+      if (is2424 && !r.allday) {
+        showModal(false, "Không được tạo", "Mã này không được tạo nhóm 24/24.");
+        return;
+      }
+      if (isVirtual && !r.virtual) {
+        showModal(false, "Không được tạo", "Mã này không được tạo nhóm ảo.");
+        return;
+      }
+      if (!is2424 && !isVirtual && !r.real) {
+        showModal(false, "Không được tạo", "Mã này không được tạo nhóm thật.");
+        return;
+      }
       await withBusy("Đang thêm nhóm…", async () => {
         const j = await api("/tenant/groups", {
           method: "POST",
@@ -1428,8 +1524,13 @@
     }
     if ($("addKind")) $("addKind").onchange = syncAddKind;
     if ($("btnAddOpen")) $("btnAddOpen").onclick = () => {
+      const r = kindRights();
+      if (!r.real && !r.virtual && !r.allday) {
+        showModal(false, "Chưa được cấp loại nhóm", "Mã này không được tạo nhóm thật, ảo hay 24/24. Liên hệ người cấp mã.");
+        return;
+      }
+      fillAddKinds();
       $("addOv").classList.add("show");
-      syncAddKind();
     };
     if ($("addCancel")) $("addCancel").onclick = () => $("addOv").classList.remove("show");
     if ($("addConfirm")) $("addConfirm").onclick = async () => {
@@ -1498,20 +1599,30 @@
     };
 
     $("btnMakeKey").onclick = () => withBusy("Đang tạo mã…", async () => {
+      const allow_real = !!$("allowReal")?.checked;
+      const allow_virtual = !!$("allowVirtual")?.checked;
+      const allow_24h = !!$("allow24")?.checked;
+      if (!allow_real && !allow_virtual && !allow_24h) {
+        throw new Error("Chọn ít nhất một loại nhóm: thật, ảo hoặc 24/24.");
+      }
       const j = await api("/licenses", {
         method: "POST",
         body: JSON.stringify({
           plan: $("adminPlan").value,
           note: ($("adminNote").value || "").trim(),
           max_groups: Number($("adminMaxG").value) || undefined,
+          allow_real,
+          allow_virtual,
+          allow_24h,
         }),
       });
-      $("adminLog").textContent = `Mã gửi khách:\n${j.license.key}\n\n${j.preset?.label || j.license.plan} · ${j.license.days} ngày · tối đa ${j.license.max_groups} nhóm\nGhi chú: ${j.license.note || "(không)"}`;
+      const rights = rightsLabel(j.license);
+      $("adminLog").textContent = `Mã gửi khách:\n${j.license.key}\n\n${j.preset?.label || j.license.plan} · ${j.license.days} ngày · tối đa ${j.license.max_groups} nhóm\nĐược tạo: ${rights}\nGhi chú: ${j.license.note || "(không)"}`;
       $("adminNote").value = "";
       await loadLicenses();
       try { await navigator.clipboard.writeText(j.license.key); } catch (_) {}
       return j;
-    }, { modalOk: { title: "Đã tạo mã", msg: (j) => `Mã ${j.license.key} — gửi cho khách.` } });
+    }, { modalOk: { title: "Đã tạo mã", msg: (j) => `Mã ${j.license.key} — được tạo ${rightsLabel(j.license)}.` } });
 
     $("btnSaveGroup").onclick = () => withBusy("Đang lưu nhóm…", async () => {
       const id = $("ge_id").value;
@@ -1520,6 +1631,15 @@
       const groupId = $("ge_group_id").value.trim();
       const previewGid = $("ge_preview_gid").value.trim();
       const is2424 = continuous && !isVirtual;
+      const nextKind = is2424 ? "24h" : isVirtual ? "virtual" : "real";
+      const prev = (tenant && tenant.groups || []).find((g) => g.id === id);
+      const prevKind = groupKindOfClient(prev);
+      if (nextKind !== prevKind) {
+        const r = kindRights();
+        if (nextKind === "24h" && !r.allday) throw new Error("Mã này không được tạo nhóm 24/24.");
+        if (nextKind === "virtual" && !r.virtual) throw new Error("Mã này không được tạo nhóm ảo.");
+        if (nextKind === "real" && !r.real) throw new Error("Mã này không được tạo nhóm thật.");
+      }
       const sendVia = is2424
         ? ($("ge_send_via")?.value || "bot")
         : ($("ge_send_via_sched")?.value || "boss");

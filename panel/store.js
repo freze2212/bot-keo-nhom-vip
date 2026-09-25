@@ -347,8 +347,47 @@ function saveLicenses(data) {
   fs.writeFileSync(LICENSES_FILE, JSON.stringify(data, null, 2), "utf8");
 }
 
-function createLicense({ plan, note, max_groups, days }) {
+function groupKindOf(group) {
+  if (group && group.continuous_mode && !group.is_virtual) return "24h";
+  if (group && group.is_virtual) return "virtual";
+  return "real";
+}
+
+function groupRights(lic) {
+  return {
+    allow_real: !lic || lic.allow_real !== false,
+    allow_virtual: !lic || lic.allow_virtual !== false,
+    allow_24h: !lic || lic.allow_24h !== false,
+  };
+}
+
+function groupKindError(lic, group) {
+  const rights = groupRights(lic);
+  const kind = groupKindOf(group);
+  if (kind === "24h" && !rights.allow_24h) return "Mã này không được tạo nhóm 24/24.";
+  if (kind === "virtual" && !rights.allow_virtual) return "Mã này không được tạo nhóm ảo.";
+  if (kind === "real" && !rights.allow_real) return "Mã này không được tạo nhóm thật.";
+  return null;
+}
+
+function readRightsPatch(src) {
+  const flag = (v) => v === true || v === "true" || v === 1 || v === "1";
+  const out = {};
+  if (src && src.allow_real != null) out.allow_real = flag(src.allow_real);
+  if (src && src.allow_virtual != null) out.allow_virtual = flag(src.allow_virtual);
+  if (src && src.allow_24h != null) out.allow_24h = flag(src.allow_24h);
+  return out;
+}
+
+function createLicense({ plan, note, max_groups, days, allow_real, allow_virtual, allow_24h }) {
   const preset = PLAN_PRESETS[plan] || PLAN_PRESETS.month;
+  const rights = readRightsPatch({ allow_real, allow_virtual, allow_24h });
+  const allowReal = rights.allow_real !== false;
+  const allowVirtual = rights.allow_virtual !== false;
+  const allow24 = rights.allow_24h !== false;
+  if (!allowReal && !allowVirtual && !allow24) {
+    return { ok: false, error: "Chọn ít nhất một loại nhóm: thật, ảo hoặc 24/24." };
+  }
   const data = loadLicenses();
   const lic = {
     key: `${String(plan || "month").toUpperCase()}-${crypto
@@ -359,6 +398,9 @@ function createLicense({ plan, note, max_groups, days }) {
     days: days != null ? Number(days) : preset.days,
     max_groups:
       max_groups != null ? Number(max_groups) : preset.max_groups,
+    allow_real: allowReal,
+    allow_virtual: allowVirtual,
+    allow_24h: allow24,
     note: note || "",
     created_at: new Date().toISOString(),
     expires_at: null,
@@ -401,6 +443,14 @@ function updateLicense(key, patch = {}) {
   if (patch.plan != null && PLAN_PRESETS[patch.plan]) {
     lic.plan = patch.plan;
   }
+  const rights = readRightsPatch(patch);
+  const nextRights = groupRights({ ...lic, ...rights });
+  if (!nextRights.allow_real && !nextRights.allow_virtual && !nextRights.allow_24h) {
+    return { ok: false, error: "Chọn ít nhất một loại nhóm: thật, ảo hoặc 24/24." };
+  }
+  if (rights.allow_real != null) lic.allow_real = rights.allow_real;
+  if (rights.allow_virtual != null) lic.allow_virtual = rights.allow_virtual;
+  if (rights.allow_24h != null) lic.allow_24h = rights.allow_24h;
   if (patch.enabled != null) lic.enabled = !!patch.enabled;
   saveLicenses(data);
   return { ok: true, license: lic };
@@ -490,6 +540,7 @@ function licensesOverview() {
     else if (lic.activated_at) status = "đang dùng";
     return {
       ...lic,
+      ...groupRights(lic),
       max_groups: maxG,
       status,
       days_left: chk.ok && chk.license ? chk.license.days_left : null,
@@ -574,6 +625,9 @@ function licenseInfoPublic(lic) {
     days_left:
       leftMs == null ? lic.days : Math.max(0, Math.ceil(leftMs / 86400000)),
     label: PLAN_PRESETS[lic.plan]?.label || `${lic.days} ngày`,
+    allow_real: groupRights(lic).allow_real,
+    allow_virtual: groupRights(lic).allow_virtual,
+    allow_24h: groupRights(lic).allow_24h,
   };
 }
 
@@ -812,6 +866,8 @@ module.exports = {
   loadLicenses,
   saveLicenses,
   createLicense,
+  groupKindOf,
+  groupKindError,
   updateLicense,
   extendLicense,
   deleteLicense,

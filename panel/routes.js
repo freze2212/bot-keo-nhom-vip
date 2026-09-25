@@ -207,6 +207,17 @@ router.put("/api/tenant", (req, res) => {
         error: `Gói của bạn tối đa ${maxG} nhóm. Liên hệ gia hạn để thêm.`,
       });
     }
+    if (Array.isArray(body.groups) && req.panelSession.role !== "admin") {
+      const prev = t.groups || [];
+      for (const raw of body.groups) {
+        const next = store.defaultGroup(raw);
+        const old = prev.find((g) => g.id === next.id);
+        if (!old || store.groupKindOf(old) !== store.groupKindOf(next)) {
+          const kindErr = store.groupKindError(chk.license, next);
+          if (kindErr) return res.status(400).json({ ok: false, error: kindErr });
+        }
+      }
+    }
 
     const saved = store.saveTenant({ ...t, ...body, license_key: t.license_key });
     const sync = store.syncToTeleForward();
@@ -236,6 +247,8 @@ router.post("/api/tenant/groups", (req, res) => {
     });
   }
   const g = store.defaultGroup(req.body || {});
+  const kindErr = store.groupKindError(chk.license, g);
+  if (kindErr) return res.status(400).json({ ok: false, error: kindErr });
   t.groups = t.groups || [];
   t.groups.push(g);
   const saved = store.saveTenant(t);
@@ -275,6 +288,11 @@ router.put("/api/tenant/groups/:gid", (req, res) => {
     });
   }
   if (next.send_via === "boss") next.token_bot = "";
+  if (store.groupKindOf(t.groups[idx]) !== store.groupKindOf(next)) {
+    const chk = store.checkLicense(t.license_key);
+    const kindErr = store.groupKindError(chk.license, next);
+    if (kindErr) return res.status(400).json({ ok: false, error: kindErr });
+  }
   t.groups[idx] = next;
   const saved = store.saveTenant(t);
   store.syncToTeleForward();
@@ -385,7 +403,11 @@ router.post("/api/licenses", adminRequired, (req, res) => {
     note: req.body.note,
     max_groups: req.body.max_groups,
     days: req.body.days,
+    allow_real: req.body.allow_real,
+    allow_virtual: req.body.allow_virtual,
+    allow_24h: req.body.allow_24h,
   });
+  if (!r.ok) return res.status(400).json(r);
   res.json(r);
 });
 
@@ -405,8 +427,14 @@ router.put("/api/licenses/:key", adminRequired, (req, res) => {
     days: req.body.days,
     plan: req.body.plan,
     enabled: req.body.enabled,
+    allow_real: req.body.allow_real,
+    allow_virtual: req.body.allow_virtual,
+    allow_24h: req.body.allow_24h,
   });
-  if (!r.ok) return res.status(404).json(r);
+  if (!r.ok) {
+    const missing = String(r.error || "").includes("Không tìm thấy");
+    return res.status(missing ? 404 : 400).json(r);
+  }
   store.syncToTeleForward();
   res.json({ ok: true, license: r.license, overview: store.licensesOverview() });
 });
