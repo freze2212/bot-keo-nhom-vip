@@ -359,12 +359,14 @@
           </div>
           <!-- Thật/ảo theo lịch -->
           <div class="grid2" id="geThatExtra">
-            <label class="f"><b>Ảnh kết quả</b>
+            <label class="f" id="geCropSchedWrap"><b>Ảnh kết quả</b>
               <select id="ge_crop_sched">
                 <option value="">Mặc định</option>
-                <option value="none">Ảnh full</option>
                 <option value="left">Crop bỏ trái</option>
+                <option value="bottom_right">Crop góc phải dưới</option>
+                <option value="none">Ảnh full</option>
               </select>
+              <span class="hint" id="geCropSchedHint">Nhóm ảo mặc định cắt bỏ phần trái. Chọn Ảnh full nếu muốn gửi cả ảnh.</span>
             </label>
             <label class="f"><b>Kéo bằng</b>
               <select id="ge_send_via_sched">
@@ -840,7 +842,10 @@
       lockKindControls(g);
       if ($("ge_gap")) $("ge_gap").value = String(g.continuous_gap_sec || 0.8);
       if ($("ge_crop")) $("ge_crop").value = g.result_crop_mode || "bottom_right";
-      if ($("ge_crop_sched")) $("ge_crop_sched").value = g.result_crop_mode || "";
+      if ($("ge_crop_sched")) {
+        const crop = g.result_crop_mode || "";
+        $("ge_crop_sched").value = g.is_virtual && !crop ? "left" : crop;
+      }
       const viaVal = g.send_via === "bot" || g.token_bot ? "bot" : "boss";
       if ($("ge_send_via")) $("ge_send_via").value = viaVal;
       if ($("ge_send_via_sched")) $("ge_send_via_sched").value = viaVal;
@@ -933,6 +938,7 @@
       $("geBaoBan").classList.toggle("hidden", v);
       $("slotAfterWrap").classList.toggle("hidden", v);
       if ($("geRatesWrap")) $("geRatesWrap").classList.toggle("hidden", !v);
+      if (v && $("ge_crop_sched") && !$("ge_crop_sched").value) $("ge_crop_sched").value = "left";
       syncContinuousUi();
     }
 
@@ -944,7 +950,12 @@
       if ($("ge2424Badge")) $("ge2424Badge").classList.toggle("hidden", !is2424);
       if ($("geScheduleWrap")) $("geScheduleWrap").classList.toggle("hidden", is2424);
       if ($("ge2424Opts")) $("ge2424Opts").classList.toggle("hidden", !is2424);
-      if ($("geThatExtra")) $("geThatExtra").classList.toggle("hidden", is2424 || virt);
+      if ($("geThatExtra")) $("geThatExtra").classList.toggle("hidden", is2424);
+      if ($("geCropSchedHint")) {
+        $("geCropSchedHint").textContent = virt
+          ? "Nhóm ảo mặc định cắt bỏ phần trái. Chọn Ảnh full nếu muốn gửi cả ảnh."
+          : "Nhóm thật mặc định gửi ảnh đầy đủ.";
+      }
       if ($("geVirtualWrap")) $("geVirtualWrap").classList.toggle("hidden", is2424);
       if ($("geContToggleWrap")) $("geContToggleWrap").classList.toggle("hidden", is2424);
 
